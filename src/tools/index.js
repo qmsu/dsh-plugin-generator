@@ -7,6 +7,7 @@ import { registerValidateTool } from './validate.js'
 import { registerPackageTool } from './package.js'
 import { registerInstallTool } from './install.js'
 import { registerCaptureTool } from './capture.js'
+import { registerProbeTool } from './probe.js'
 
 export function registerScaffoldTools(ctx, config) {
   registerPlanTool(ctx, config)
@@ -17,4 +18,5 @@ export function registerScaffoldTools(ctx, config) {
   registerPackageTool(ctx, config)
   registerInstallTool(ctx)
   registerCaptureTool(ctx)
+  registerProbeTool(ctx)
 }

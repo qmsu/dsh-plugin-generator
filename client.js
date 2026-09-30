@@ -34,10 +34,12 @@ window.__ModuleLoader__.load({
       typeTool: '工具',
       typeEvents: '事件',
       typeFile: '文件',
+      typeToolkit: '能力套件',
       typeDescAuto: '由 AI 根据你的描述自行判断最合适的形态（推荐）',
       typeDescTool: '给 AI 加一个可调用的能力，如"转换 Excel"、"查询库存"',
       typeDescEvents: '在会话过程中自动做事，如"每轮结束导出记录"',
       typeDescFile: '读写处理文件（Excel / PDF / Word / CSV）',
+      typeDescToolkit: '把多个 MCP server + 编排 skill 打成一个可安装的插件（一键装一整套）',
       submit: '生成插件',
       submitting: '正在创建制作会话…',
       done: '已创建制作会话，请到左侧会话列表打开「制作插件：…」查看生成过程。',
@@ -99,10 +101,12 @@ window.__ModuleLoader__.load({
       typeTool: 'Tool',
       typeEvents: 'Events',
       typeFile: 'File',
+      typeToolkit: 'Toolkit',
       typeDescAuto: 'The AI picks the most suitable form from your description (recommended)',
       typeDescTool: 'A capability the AI can call, e.g. “convert Excel”',
       typeDescEvents: 'Acts automatically during sessions, e.g. “export notes after each turn”',
       typeDescFile: 'Read/write files (Excel / PDF / Word / CSV)',
+      typeDescToolkit: 'Bundle several MCP servers plus an orchestration skill into one installable plugin',
       submit: 'Generate',
       submitting: 'Creating session…',
       done: 'Session created. Open “Plugin Maker: …” in the session list to watch it build.',
@@ -526,6 +530,7 @@ window.__ModuleLoader__.load({
           { value: 'tool', label: t('typeTool'), desc: t('typeDescTool') },
           { value: 'events', label: t('typeEvents'), desc: t('typeDescEvents') },
           { value: 'file', label: t('typeFile'), desc: t('typeDescFile') },
+          { value: 'toolkit', label: t('typeToolkit'), desc: t('typeDescToolkit') },
         ]
         var activeType = typeOptions.filter(function (o) { return o.value === form.type })[0] || typeOptions[0]
 

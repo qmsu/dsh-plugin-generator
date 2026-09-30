@@ -23,7 +23,7 @@ const SKILL_BODY = `\
 
 3. **生成骨架**：用户确认后调 \`scaffold_create\`，按模板生成工程（package.json、cordis.patch.yml、src/index.js）。
 
-4. **写业务代码**：用 \`scaffold_write_file\` 写/改文件。先在计划里想清楚每个 tool 的 name/description/parameters/output schema 再落笔。**capability 模板**：本步的核心是把 \`scaffold_capture\` 提取的素材蒸馏进 assets/skill.md（步骤/规则/产出契约/质量要点，用 scaffold_write_file 覆盖），并把"输入 → 最终结果的示范对"写进 assets/examples.json（JSON 数组，元素形如 \`{"input": ..., "output": ...}\`，来自 capture 的需求与最终结果，可按需补 1-3 条）；然后把 src/harness.js 的 checkContract 落实成与产出契约一致的具体规则（纯函数、确定性）。**capability 保真五要求（差距主要死在这里，逐条落实）**：① examples.json 第一对的 output 必须是 capture 拿到的最终结果的**完整原文**，禁止摘要/改写/重排版/缩水；capture 返回 truncated=true 时必须重跑并传更大 maxResultBytes（如 60000）直到拿到全文；② assets/skill.md 必须设「原始标杆产出」一节，把原始产出**全文**收进去作质量标杆（模型运行时会加载它对照着做），步骤要具体到"先产出什么结构、再渲染成什么格式"；③ checkContract 的规则从原始产出提炼成可机器检查的指标：必备章节/字段清单、长度下限、关键内容特征（如原作有的栏目、样式约定），做不到机器判定的"质量"写进 skill.md 的质量要点；④ \`xxx_render\` 的输出必须与原始产出同构——原作是 HTML 就渲染 HTML，是表格就渲染表格，**不得退化成 Markdown 摘要**；中间结构按原始产出的结构切块；⑤ 交付前自验收：用 examples.json 第一对的 input 在脑内重放"产出中间结构 → validate → render"全流程，确认产出与原始结果同构、水准对齐，不对就回去补 skill/示例/规则。
+4. **写业务代码**：用 \`scaffold_write_file\` 写/改文件。先在计划里想清楚每个 tool 的 name/description/parameters/output schema 再落笔。**capability 模板**：本步的核心是把 \`scaffold_capture\` 提取的素材蒸馏进 assets/skill.md（步骤/规则/产出契约/质量要点，用 scaffold_write_file 覆盖），并把"输入 → 最终结果的示范对"写进 assets/examples.json（JSON 数组，元素形如 \`{"input": ..., "output": ...}\`，来自 capture 的需求与最终结果，可按需补 1-3 条）；然后把 src/harness.js 的 checkContract 落实成与产出契约一致的具体规则（纯函数、确定性）。**toolkit 模板**：MCP server 已在 cordis.patch.yml 里以 \`@deepseek-ai/dsh-mcp-client\` 行挂载（scaffold_create 按 plan.mcp 自动生成，不要自己改 patch 里 mcp-client 的结构）；本步核心是用 scaffold_write_file 把每个 assets/skills/<slug>.md 的**编排 skill 正文**写好——写清「每个 MCP 工具是干什么、什么场景、按什么顺序组合」，而不是泛泛而谈。serverName 唯一且匹配 \`^[A-Za-z0-9_-]{1,32}$\`；stdio 用 command（npx/uvx 等懒加载 runner 可直接写）、streamable-http 用 url。交付前调 \`scaffold_probe_mcp\` 探测每个 server 可达性。**capability 保真五要求（差距主要死在这里，逐条落实）**：① examples.json 第一对的 output 必须是 capture 拿到的最终结果的**完整原文**，禁止摘要/改写/重排版/缩水；capture 返回 truncated=true 时必须重跑并传更大 maxResultBytes（如 60000）直到拿到全文；② assets/skill.md 必须设「原始标杆产出」一节，把原始产出**全文**收进去作质量标杆（模型运行时会加载它对照着做），步骤要具体到"先产出什么结构、再渲染成什么格式"；③ checkContract 的规则从原始产出提炼成可机器检查的指标：必备章节/字段清单、长度下限、关键内容特征（如原作有的栏目、样式约定），做不到机器判定的"质量"写进 skill.md 的质量要点；④ \`xxx_render\` 的输出必须与原始产出同构——原作是 HTML 就渲染 HTML，是表格就渲染表格，**不得退化成 Markdown 摘要**；中间结构按原始产出的结构切块；⑤ 交付前自验收：用 examples.json 第一对的 input 在脑内重放"产出中间结构 → validate → render"全流程，确认产出与原始结果同构、水准对齐，不对就回去补 skill/示例/规则。
 
 5. **校验修复循环**：调 \`scaffold_validate\`（默认做激活预检：装依赖 → import → apply，会把 defineTool 的 schema 编译错误提前暴露）。有错就改（scaffold_write_file 置 overwrite=true 覆盖），再校验，直到通过。
 
@@ -47,7 +47,13 @@ const SKILL_BODY = `\
     }
   ],
   "events": [],                        // 模板 events 时填要监听的事件，如 "turn/end"
-  "dependencies": ["exceljs"]          // 仅限白名单：exceljs / xlsx / pdfjs-dist / mammoth / papaparse / yaml / marked
+  "dependencies": ["exceljs"],         // 仅限白名单：exceljs / xlsx / pdfjs-dist / mammoth / papaparse / yaml / marked
+  "mcp": [                             // 模板 toolkit 时：要打包的 MCP server 清单
+    { "serverName": "github", "transport": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": { "GITHUB_TOKEN": "" } }
+  ],
+  "skills": [                          // 模板 toolkit 时：编排 skill（content 留空，生成时用 write_file 写正文）
+    { "name": "github-workflow", "description": "用 GitHub MCP 完成 issue/PR 流", "whenToUse": "用户要我操作 GitHub 仓库时" }
+  ]
 }
 \`\`\`
 
@@ -57,6 +63,7 @@ const SKILL_BODY = `\
 - **file**：需求涉及文件读写（Excel/PDF/CSV/Word 解析、批量处理、产物落盘）。在 tool 基础上内置文件处理骨架与解析库依赖。
 - **events**：需要在会话生命周期时机做事（如每轮结束导出记录）。不给模型注册 tool，只监听事件。
 - **capability**：把"一次成功会话的能力"固化成可复现的插件（用户说"以后都要这样的结果/把这次的做法固化下来"）。生成的插件 = 一个 skill（步骤/规则/产出契约/少样本示例，静态文本钉死"做什么"）+ 一对确定性工具（xxx_validate 机器校验候选产出、xxx_render 确定性渲染）。稳定性三层：skill 文本不变、示例钉死水准、校验把随机性压到最小。
+- **toolkit**：把一堆 MCP server 和若干 skill 整合成一个插件（一个「能力套件」）。生成的 bundle 在 cordis.patch.yml 里挂 N 个 \`@deepseek-ai/dsh-mcp-client\`，自带编排 skill。用户说"把这些 MCP 打包成一个插件 / 给 dsh 装一整套工具"时选它。
 
 ## 生成插件的硬性规则（写进代码的约定，违反会导致插件跑不起来）
 
@@ -69,6 +76,7 @@ const SKILL_BODY = `\
 7. 代码里所有异步操作尊重 \`exec.signal\`（中止时尽快收尾）。
 8. 文件写入类工具：产物路径要回报给用户，并处理文件不存在/超限的报错。
 9. capability 模板注册 skill 时必须带 \`source: 'runtime'\`（dsh 的 validateDefinition 要求），技能正文从 assets/skill.md 读入并与 assets/examples.json 的示例拼接。
+10. toolkit 模板：cordis.patch.yml 里的 mcp-client \`serverName\` 必须唯一且匹配 \`^[A-Za-z0-9_-]{1,32}$\`；stdio 必填 command、streamable-http 必填 url；MCP 密钥一律经 env/headers 注入（值留占位，文档告知用户 export 什么），**绝不把 token 写死进生成代码或 zip**。
 
 ## 语气
 

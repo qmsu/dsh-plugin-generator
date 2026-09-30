@@ -387,4 +387,101 @@ export const TEMPLATES = {
   events: renderEvents,
   file: renderFile,
   capability: renderCapability,
+  toolkit: renderToolkit,
+}
+
+// ---- toolkit 模板：把 N 个 MCP server + 编排 skill 打成一个 bundle，一键装一整套 ----
+
+/** 极小 YAML 标量：安全词原样，其余单引号包裹（空串 → ''）。 */
+function ystr(v) {
+  const s = String(v ?? '')
+  if (s === '') return "''"
+  if (/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(s)) return s
+  return `'${s.replace(/'/g, "''")}'`
+}
+
+/** 把 mcp-client 一行展开成 6 空格缩进的 config（env/headers 序列化成对象块）。 */
+function mcpClientConfig(server, indent) {
+  const pad = ' '.repeat(indent)
+  const lines = [
+    `serverName: ${ystr(server.serverName)}`,
+    `transport: ${server.transport}`,
+  ]
+  if (server.transport === 'stdio') {
+    lines.push(`command: ${ystr(server.command)}`)
+    if (Array.isArray(server.args) && server.args.length) lines.push(`args: [${server.args.map(ystr).join(', ')}]`)
+    const envKeys = Object.keys(server.env ?? {})
+    if (envKeys.length) {
+      lines.push('env:')
+      for (const k of envKeys) lines.push(`  ${k}: ${ystr(server.env[k])}`)
+    }
+    if (server.cwd) lines.push(`cwd: ${ystr(server.cwd)}`)
+  } else {
+    lines.push(`url: ${ystr(server.url)}`)
+    const headerKeys = Object.keys(server.headers ?? {})
+    if (headerKeys.length) {
+      lines.push('headers:')
+      for (const k of headerKeys) lines.push(`  ${k}: ${ystr(server.headers[k])}`)
+    }
+  }
+  lines.push('failOnStartupError: true')
+  // indent 是 config 项的缩进层级；此处 lines 内层（env 的 k:v）还需再加缩进，上面手工拼了 2 空格，统一用 pad 对齐顶层行
+  return lines.map((l) => `${pad}${l}`).join('\n')
+}
+
+function slugify(s) {
+  const v = String(s ?? '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64)
+  return v || 'skill'
+}
+
+function renderToolkit(plan) {
+  const mcpServers = Array.isArray(plan.mcp) ? plan.mcp : []
+  const skills = Array.isArray(plan.skills) && plan.skills.length ? plan.skills : [{ name: plan.pluginId, description: plan.description, whenToUse: plan.description }]
+
+  // 编排 skill 元数据（内联进 src/index.js），正文在 assets/skills/<slug>.md 由生成会话填充
+  const skillMeta = skills.map((s, i) => {
+    const rawName = String(s?.name ?? '').trim()
+    return {
+      name: rawName || plan.pluginId,
+      description: String(s?.description ?? '').replace(/'/g, "\\'"),
+      whenToUse: String(s?.whenToUse ?? s?.description ?? '').replace(/'/g, "\\'"),
+      slug: slugify(rawName || `skill-${i}`),
+    }
+  })
+
+  const skillFiles = {}
+  for (const m of skillMeta) {
+    const toolsHint = mcpServers.length
+      ? mcpServers.map((srv) => `#### ${srv.serverName}（transport: ${srv.transport}）\n- 工具命名空间 \`mcp__${srv.serverName}__<tool>\`（连接后具体工具清单由工具描述提供）\n- 连接方式：${srv.transport === 'stdio' ? `\`${srv.command}${(srv.args ?? []).length ? ' ' + srv.args.join(' ') : ''}\`` : srv.url}`).join('\n')
+      : '（本套件未声明 MCP server）'
+    skillFiles[`assets/skills/${m.slug}.md`] = `# ${m.name}\n\n${m.description}\n\n<!-- 由生成会话用 scaffold_write_file 覆盖成可运行的编排说明：教模型这些工具分别是什么、什么场景、按什么顺序组合。 -->\n\n## 适用场景\n\n<!-- 什么输入适合用本套件；不适用的情形写清楚防止误路由 -->\n\n## 可用 MCP 工具\n\n${toolsHint}\n\n## 步骤与组合\n\n1. （第 1 步用哪个工具做什么）\n2. （第 2 步…）\n3. （收尾：产出结果 / 回报用户）\n`
+  }
+
+  const patchRows = [
+    `    - id: ${plan.pluginId}\n      name: '${plan.packageName}'`,
+    ...mcpServers.map((srv) => `    - id: ${plan.pluginId}-mcp-${srv.serverName}\n      name: '@deepseek-ai/dsh-mcp-client'\n      config:\n${mcpClientConfig(srv, 8)}`),
+  ]
+
+  const skillMetaJs = skillMeta.map((m) => `  { name: '${m.name}', description: '${m.description}', whenToUse: '${m.whenToUse}', file: 'assets/skills/${m.slug}.md' },`).join('\n')
+
+  return {
+    'package.json': `${JSON.stringify({
+      name: plan.packageName,
+      version: '0.1.0',
+      description: plan.description,
+      type: 'module',
+      main: 'src/index.js',
+      exports: {
+        '.': './src/index.js',
+        './cordis.patch.yml': './cordis.patch.yml',
+        './package.json': './package.json',
+      },
+      dsh: { bundle: { patch: './cordis.patch.yml' } },
+      license: 'MIT',
+    }, null, 2)}\n`,
+    'cordis.patch.yml': `# ${plan.packageName} 的 bundle patch：N 个 MCP server（@deepseek-ai/dsh-mcp-client）+ 编排 skill 插件。\n- insert:\n${patchRows.join('\n')}\n`,
+    'README.md': `# ${plan.packageName}\n\n${plan.description}\n\n「能力套件（toolkit）」插件：一个 bundle 打包 N 个 MCP server + 编排 skill，一键安装、可复现。\n\n## 包含的 MCP server\n${mcpServers.map((srv) => `- **${srv.serverName}**（${srv.transport}）— ${srv.transport === 'stdio' ? `\`${srv.command}${(srv.args ?? []).length ? ' ' + srv.args.join(' ') : ''}\`` : srv.url}`).join('\n') || '（无）'}\n\n## 包含的 skill\n${skillMeta.map((m) => `- **${m.name}**：${m.description}`).join('\n')}\n\n## 安装\n\n\`\`\`bash\ndsh plugin --profile <profile> add <本目录>\n\`\`\`\n\n## 使用\n\n安装后新增 \`mcp__<serverName>__<tool>\` 命名空间的工具；编排 skill「${skillMeta.map((m) => m.name).join(' / ')}」在匹配场景自动加载。\n\n密钥：MCP 依赖的凭据通过环境变量 / 请求头注入（见 cordis.patch.yml 的 env / headers 键名），请自行 export 对应变量，切勿把 token 写进本目录的代码。\n`,
+    'src/index.js': `// ${plan.packageName}：${plan.description}\n// 由 dsh-plugin-generator 生成（toolkit 模板：N 个 MCP server + 编排 skill）。\n// MCP server 在 cordis.patch.yml 里以 @deepseek-ai/dsh-mcp-client 挂载；这里只注册编排 skill。\nimport { readFileSync } from 'node:fs'\nimport { dirname, join } from 'node:path'\nimport { fileURLToPath } from 'node:url'\n\nconst root = join(dirname(fileURLToPath(import.meta.url)), '..')\n\nexport const name = '${plan.pluginId}'\nexport const inject = ['skills']\n\n// 编排 skill 元数据；正文在 assets/skills/<slug>.md（生成会话用 scaffold_write_file 填好）\nconst SKILLS = [\n${skillMetaJs}\n]\n\nexport function apply(ctx) {\n  for (const skill of SKILLS) {\n    let content = ''\n    try { content = readFileSync(join(root, skill.file), 'utf8') } catch {}\n    ctx.skills.register({\n      name: skill.name,\n      description: skill.description,\n      whenToUse: skill.whenToUse,\n      content,\n      source: 'runtime',\n      invocation: { modelInvocable: true, userInvocable: true },\n    })\n  }\n}\n`,
+    ...skillFiles,
+  }
 }

@@ -3,7 +3,7 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { isValidKebab, pretty, textBlock, toKebabCase, toSnakeCase } from './util.js'
 
-const TEMPLATES = ['tool', 'events', 'file', 'capability']
+const TEMPLATES = ['tool', 'events', 'file', 'capability', 'toolkit']
 
 export function registerPlanTool(ctx, config) {
   ctx.tools.register(defineTool({
@@ -40,6 +40,8 @@ export function registerPlanTool(ctx, config) {
           tools: { type: 'json', required: true },
           events: { type: 'json', required: true },
           dependencies: { type: 'json', required: true },
+          mcp: { type: 'json', required: true },
+          skills: { type: 'json', required: true },
           warnings: { type: 'json', required: true },
         },
       },
@@ -82,7 +84,7 @@ export function registerPlanTool(ctx, config) {
         params: Array.isArray(t.params) ? t.params : [],
         returns: String(t.returns ?? ''),
       })) : []
-      if (template !== 'events' && template !== 'capability' && tools.length === 0) {
+      if (template !== 'events' && template !== 'capability' && template !== 'toolkit' && tools.length === 0) {
         tools.push({
           name: pluginId.replace(/-/g, '_'),
           description: String(draft.description ?? args.requirement).slice(0, 80),
@@ -117,6 +119,73 @@ export function registerPlanTool(ctx, config) {
       }
 
       const description = String(draft.description ?? args.requirement).slice(0, 200)
+
+      // MCP server 清单（toolkit 模板）：字段校验 + 规范化。serverName 规则与 dsh-mcp-client 一致
+      const SERVER_NAME_RE = /^[A-Za-z0-9_-]{1,32}$/
+      const mcp = []
+      if (template === 'toolkit') {
+        const seen = new Set()
+        for (const raw of Array.isArray(draft.mcp) ? draft.mcp : []) {
+          const serverName = String(raw?.serverName ?? '').trim()
+          if (!SERVER_NAME_RE.test(serverName)) {
+            warnings.push(`MCP serverName "${serverName || '(空)'}" 非法（需 ${SERVER_NAME_RE.source} 的 1-32 位），已跳过`)
+            continue
+          }
+          if (seen.has(serverName)) {
+            warnings.push(`MCP serverName "${serverName}" 重复，仅保留第一个`)
+            continue
+          }
+          const out = {
+            serverName,
+            transport: String(raw?.transport ?? 'stdio') === 'streamable-http' ? 'streamable-http' : 'stdio',
+            failOnStartupError: true,
+          }
+          if (out.transport === 'stdio') {
+            out.command = String(raw?.command ?? '').trim()
+            if (!out.command) {
+              warnings.push(`MCP "${serverName}"（stdio）缺 command，已跳过`)
+              continue
+            }
+            out.args = Array.isArray(raw?.args) ? raw.args.map(String) : []
+            out.env = raw?.env && typeof raw.env === 'object' && !Array.isArray(raw.env)
+              ? Object.fromEntries(Object.entries(raw.env).map(([k, v]) => [k, String(v)]))
+              : {}
+            out.cwd = String(raw?.cwd ?? '')
+          } else {
+            out.url = String(raw?.url ?? '').trim()
+            if (!out.url) {
+              warnings.push(`MCP "${serverName}"（streamable-http）缺 url，已跳过`)
+              continue
+            }
+            out.headers = raw?.headers && typeof raw.headers === 'object' && !Array.isArray(raw.headers)
+              ? Object.fromEntries(Object.entries(raw.headers).map(([k, v]) => [k, String(v)]))
+              : {}
+          }
+          seen.add(serverName)
+          mcp.push(out)
+        }
+        if (mcp.length === 0) warnings.push('toolkit 模板但未给出有效 MCP server 清单')
+      }
+
+      // 编排 skill 清单（toolkit 模板）：content 留空，由生成会话用 scaffold_write_file 填
+      const skills = []
+      if (template === 'toolkit') {
+        const list = Array.isArray(draft.skills) ? draft.skills : []
+        if (list.length === 0) {
+          skills.push({ name: pluginId, description, whenToUse: description, content: '' })
+          warnings.push('toolkit 未给出编排 skill，已补一个占位 skill（name = 插件 id），请在生成时完善其 content')
+        } else {
+          for (const s of list) {
+            skills.push({
+              name: toKebabCase(s?.name ?? '') || pluginId,
+              description: String(s?.description ?? ''),
+              whenToUse: String(s?.whenToUse ?? String(s?.description ?? '')),
+              content: '',
+            })
+          }
+        }
+      }
+
       return {
         pluginId,
         packageName: pluginId.startsWith('dsh-') ? pluginId : `dsh-${pluginId}`,
@@ -125,6 +194,8 @@ export function registerPlanTool(ctx, config) {
         tools,
         events,
         dependencies: deps,
+        mcp,
+        skills,
         warnings,
       }
     },

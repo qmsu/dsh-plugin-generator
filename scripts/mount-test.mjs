@@ -15,9 +15,10 @@ await ctx.plugin(scaffold)
 
 const names = ctx.tools.schemas().map((s) => s.name).filter((n) => n.startsWith('scaffold_'))
 console.log('已注册工具:', names.join(', '))
-if (names.length !== 8) throw new Error(`应有 8 个 scaffold_* 工具，实际 ${names.length}`)
+if (names.length !== 9) throw new Error(`应有 9 个 scaffold_* 工具，实际 ${names.length}`)
 if (!names.includes('scaffold_install')) throw new Error('scaffold_install 未注册')
 if (!names.includes('scaffold_capture')) throw new Error('scaffold_capture 未注册')
+if (!names.includes('scaffold_probe_mcp')) throw new Error('scaffold_probe_mcp 未注册')
 
 const catalog = await ctx.skills.list()
 const skill = catalog.find((s) => s.name === 'make-dsh-plugin')
