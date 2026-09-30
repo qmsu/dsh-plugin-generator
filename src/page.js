@@ -16,7 +16,12 @@ const DSH_PROFILE_ROOT = join(homedir(), '.dsh', 'profiles')
 function composePrompt(requirement, templateHint, referenceText) {
   const hint = templateHint && templateHint !== 'auto' ? `（模板倾向：${templateHint}）` : ''
   const ref = referenceText ? `\n\n附参考文件内容（节选，已由页面读取）：\n<<<\n${referenceText}\n>>>` : ''
-  return `请使用 make-dsh-plugin 技能制作一个 dsh 插件：${requirement}${hint}。先向我确认计划，确认后再开始生成。${ref}`
+  // capability（能力固化）追加保真要求：差距主要来自示例缩水、skill 没收录原始产出全文、
+  // 校验规则不具体、渲染退化成摘要——这几点要在源头钉死
+  const fidelity = templateHint === 'capability'
+    ? '\n\n本次是能力固化：目标是让生成的插件在同类需求下稳定复现源会话最终结果的同等质量与格式。硬性要求：① assets/examples.json 收录「需求原文 → 最终结果完整原文」对照对，output 必须完整原文，禁止摘要/改写/缩水；capture 返回 truncated=true 时重跑并传更大 maxResultBytes（如 60000）直到拿到全文；② assets/skill.md 把原始产出全文收进「原始标杆产出」一节作质量标杆，步骤可复现、产出契约可机器检查；③ checkContract 规则从原始产出提炼（必备章节/字段、长度下限、关键内容特征）；④ 渲染输出与原始产出同构（原作 HTML 就渲染 HTML，不得退化成 Markdown 摘要）；⑤ 交付前用 examples 的输入重放 validate→render 自验收。'
+    : ''
+  return `请使用 make-dsh-plugin 技能制作一个 dsh 插件：${requirement}${hint}。先向我确认计划，确认后再开始生成。${ref}${fidelity}`
 }
 
 function readJsonBody(req, limit) {

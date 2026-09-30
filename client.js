@@ -699,10 +699,12 @@ window.__ModuleLoader__.load({
             try { host.sessions.list.getSnapshot().ids.forEach(function (id) { prior.add(id) }) } catch (e) {}
           }
           setState('working')
-          var requirement = '基于会话 ' + sessionId + (messageId ? ' 截止到消息 ' + messageId : '') + ' 把已完成的能力固化成插件。第 1 步必须调 scaffold_capture，sessionId 传 "' + sessionId + '"' +
+          var requirement = '基于会话 ' + sessionId + (messageId ? ' 截止到消息 ' + messageId : '') + ' 把已完成的能力固化成插件，目标：生成的插件在同类需求下能稳定复现源会话最终结果的同等质量与格式（以源会话最终结果为基准样本）。第 1 步必须调 scaffold_capture，sessionId 传 "' + sessionId + '"' +
             (messageId ? '、upToMessageId 传 "' + messageId + '"（只提取到该条回复为止的需求/结果/过程）' : '') +
-            '；然后按 capability 模板生成插件：把素材蒸馏进 assets/skill.md（步骤/规则/产出契约/质量要点）、' +
-            '把示范的输入→产出对写入 assets/examples.json、把 src/harness.js 的 checkContract 落实成与产出契约一致的具体规则，最后校验打包。'
+            '；若返回 truncated=true，必须重跑并传更大 maxResultBytes（如 60000）直到拿到最终结果全文。然后按 capability 模板生成插件，三点硬性要求：' +
+            '① assets/examples.json 必须收录「需求原文 → 最终结果完整原文」对照对，output 是 capture 拿到的最终结果的完整原文，禁止摘要/改写/缩水；' +
+            '② assets/skill.md 必须把原始产出全文收进「原始标杆产出」一节作质量标杆，并写清可复现步骤与可机器检查的产出契约（checkContract 的规则要从原始产出提炼：必备章节/字段、长度下限、关键内容特征）；' +
+            '③ 渲染结果必须与原始产出同构（原作是 HTML 就渲染 HTML，不得退化成 Markdown 摘要）。交付前用 examples 里的输入重放 validate→render 自验收，确认产出与原始结果同构。最后校验打包。'
           request('POST', '/plugin-scaffold/make', { requirement: requirement, templateHint: 'capability', referenceText: '' }).then(function (res) {
             if (!(res.ok && res.body.ok)) { setState('idle'); return }
             if (!host.sessions) { setState('done'); return }

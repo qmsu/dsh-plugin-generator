@@ -113,7 +113,8 @@ function parseSession(text, upToMessageId) {
   const requirement = contentText(firstUser?.data?.content).slice(0, 2000)
 
   const assistants = events.filter((e) => e.type === 'assistant/message' && inScope(e))
-  const finalResult = contentText(assistants.at(-1)?.data?.message?.content, true).slice(0, 20000)
+  // 预切只防极端超长（如整个产物当一条回复），正常不应触发；真正的上限在 maxResultBytes 处按字节截
+  const finalResult = contentText(assistants.at(-1)?.data?.message?.content, true).slice(0, 200000)
 
   // 工具调用序列（去重保序）：固化"当时是怎么做的"
   const procedure = []
@@ -139,7 +140,7 @@ export function registerCaptureTool(ctx) {
       },
       maxResultBytes: {
         type: 'integer',
-        description: '最终结果文本抽取上限（UTF-8 字节），默认 8000',
+        description: '最终结果文本抽取上限（UTF-8 字节），默认 60000。能力固化要拿原始产出全文作标杆示例，不要用小值',
       },
       upToMessageId: {
         type: 'string',
@@ -183,7 +184,7 @@ export function registerCaptureTool(ctx) {
 
       const parsed = parseSession(text, String(args.upToMessageId ?? '').trim() || undefined)
       const id = dir.split('/').pop()
-      const maxResultBytes = Number(args.maxResultBytes ?? 8000)
+      const maxResultBytes = Number(args.maxResultBytes ?? 60000)
       let finalResult = parsed.finalResult
       let truncated = false
       if (Buffer.byteLength(finalResult, 'utf8') > maxResultBytes) {
