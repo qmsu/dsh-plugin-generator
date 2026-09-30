@@ -1,0 +1,48 @@
+{
+  "name": "dsh-plugin-generator",
+  "version": "0.1.0",
+  "description": "dsh 插件制作脚手架：在 dsh 会话里一句话制作插件（支持参考文件，生成的插件可处理文件）",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "check": "node --check src/index.js && for f in src/tools/*.js src/templates/*.js; do node --check $f; done && echo OK"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-api-session-controller"
+      ],
+      "platform": "web"
+    }
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "mammoth": "^1.13.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-webhook": "*",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "scaffold",
+    "generator"
+  ],
+  "license": "MIT"
+}

@@ -1,0 +1,11 @@
+# dsh-plugin-generator 的 bundle patch：把脚手架插件挂进 profile。
+# 安装本包后（dsh plugin --profile <名> add <包>），下面条目生效；
+# 用户 cordis.patch.yml 可用 `- id: plugin-scaffold / disabled: true` 关停。
+- insert:
+    - id: plugin-scaffold
+      name: 'dsh-plugin-generator'
+    # webhook 运行时：把「制作插件」页面请求变成新会话的唯一内置动作。
+    # 仅 profile 类部署激活；web 模板默认不含 dsh-webhook，由本包带入。
+    - id: plugin-scaffold-webhook
+      name: '@deepseek-ai/dsh-webhook'
+      disabled: !!js "!ctx.get('profileContext')"

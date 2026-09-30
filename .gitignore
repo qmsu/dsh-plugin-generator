@@ -1,0 +1,6 @@
+node_modules/
+.smoke-*/
+_exports/
+*.zip
+.DS_Store
+.e2e-*/
