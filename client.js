@@ -17,12 +17,13 @@ window.__ModuleLoader__.load({
       title: '一句话制作 dsh 插件',
       intro: '描述你想要的插件，AI 会在新会话里把它做出来。参考文件可在此拖入或到制作会话里追加。',
       placeholder: '例：做一个把 Excel 批量转 Markdown 的插件，支持指定输出目录',
-      refLabel: '参考文件（可选，可多选；文本类会读取内容一并发送）',
+      refLabel: '参考文件（可选，可多选文件或目录；文本类会读取内容一并发送）',
       refChoose: '选择文件…',
+      refChooseDir: '选择目录…',
       refNone: '未选择',
       refRemove: '移除',
       refCount: '个文件',
-      refHint: '二进制文件（xlsx/docx/图片）请在制作会话里拖入，模型自行解析。',
+      refHint: '目录会读取其中全部文本文件（自动跳过 node_modules/.git 与二进制）；二进制文件（xlsx/docx/图片）请在制作会话里拖入，模型自行解析。',
       dirLabel: '插件存放目录',
       dirPick: '选择目录…',
       dirPicking: '正在打开选择器…',
@@ -84,12 +85,13 @@ window.__ModuleLoader__.load({
       title: 'Make a dsh plugin in one sentence',
       intro: 'Describe the plugin you want and the AI builds it in a new session. Attach reference files here or in that session.',
       placeholder: 'e.g. batch-convert Excel files to Markdown with an output directory option',
-      refLabel: 'Reference files (optional, multiple allowed; text files are read and sent)',
+      refLabel: 'Reference files (optional, files or folders; text files are read and sent)',
       refChoose: 'Choose…',
+      refChooseDir: 'Choose folder…',
       refNone: 'None',
       refRemove: 'Remove',
       refCount: 'files',
-      refHint: 'Binary files (xlsx/docx/images) should be dropped into the build session instead.',
+      refHint: 'Folders are scanned for text files (node_modules/.git and binaries skipped). Drop binaries (xlsx/docx/images) into the build session instead.',
       dirLabel: 'Plugin output directory',
       dirPick: 'Choose…',
       dirPicking: 'Opening chooser…',
@@ -327,20 +329,30 @@ window.__ModuleLoader__.load({
           })
         }
 
-        // 参考文件：多选，逐个读取文本内容随需求一起发送；二进制交给会话
+        // 参考文件：多选文件或整个目录，逐个读取文本内容随需求一起发送；二进制交给会话。
+        // 目录模式（webkitdirectory）下 file.webkitRelativePath 含相对路径，同名（同路径）视为替换。
+        var SKIP_REF_EXT = /\.(png|jpe?g|gif|webp|ico|bmp|pdf|xlsx?|docx?|pptx?|zip|gz|tgz|bz2|7z|rar|jar|war|exe|dll|so|dylib|bin|wasm|mp[34]|m4a|mov|avi|mkv|woff2?|ttf|otf|eot|class|pyc?|db|sqlite)$/i
+
         var onChooseRef = function (e) {
           var files = Array.prototype.slice.call(e.target.files || [])
           e.target.value = ''
           if (!files.length) return
-          var readers = files.map(function (file) {
-            return new Promise(function (resolve) {
-              var reader = new FileReader()
-              reader.onload = function () { resolve({ name: file.name, text: String(reader.result || '').slice(0, 8000) }) }
-              reader.onerror = function () { resolve({ name: file.name, text: '' }) }
-              reader.readAsText(file)
+          var readers = files
+            .filter(function (file) {
+              var p = file.webkitRelativePath || file.name
+              // 目录模式下跳过依赖/版本控制目录，二进制扩展名跳过（省 60K 预算，二进制交给会话）
+              return !/(^|\/)(node_modules|\.git|\.svn|\.hg)(\/|$)/.test(p) && !SKIP_REF_EXT.test(p)
             })
-          })
+            .map(function (file) {
+              return new Promise(function (resolve) {
+                var reader = new FileReader()
+                reader.onload = function () { resolve({ name: file.webkitRelativePath || file.name, text: String(reader.result || '').slice(0, 8000) }) }
+                reader.onerror = function () { resolve({ name: file.webkitRelativePath || file.name, text: '' }) }
+                reader.readAsText(file)
+              })
+            })
           Promise.all(readers).then(function (items) {
+            if (!items.length) return
             setForm(function (v) {
               // 同名文件视为替换，其余追加
               var kept = v.refFiles.filter(function (f) {
@@ -570,6 +582,14 @@ window.__ModuleLoader__.load({
               react.createElement('label', { className: 'psc-btn psc-btn-ghost psc-btn-sm' },
                 t('refChoose'),
                 react.createElement('input', { type: 'file', multiple: true, style: { display: 'none' }, onChange: onChooseRef }),
+              ),
+              react.createElement('label', { className: 'psc-btn psc-btn-ghost psc-btn-sm' },
+                t('refChooseDir'),
+                react.createElement('input', {
+                  type: 'file', style: { display: 'none' }, onChange: onChooseRef,
+                  // webkitdirectory 是非标准属性，ref 方式设置最稳（React 各版本都支持）
+                  ref: function (el) { if (el) el.setAttribute('webkitdirectory', '') },
+                }),
               ),
             ),
             form.refFiles.length
