@@ -724,7 +724,7 @@ window.__ModuleLoader__.load({
             try { host.sessions.list.getSnapshot().ids.forEach(function (id) { prior.add(id) }) } catch (e) {}
           }
           setState('working')
-          var requirement = '基于会话 ' + sessionId + (messageId ? ' 截止到消息 ' + messageId : '') + ' 把已完成的能力固化成插件，目标：生成的插件在同类需求下能稳定复现源会话产出的**全部成果物**的同等质量与格式（以源会话各成果物原文为基准样本）。注意：一次会话可能产出多份独立成果（如先写公众号文章、再为文章配图提示词），**全部都要固化，不要只盯最后一条回复**。若会话是「先给候选选项 → 我选一个 → 再按所选继续」（如给选题清单让我挑、给方案让我选），插件要保留"出选项 → 等我选 → 按所选继续"这个交互流程，任何一项具体选择都不得被当固定输出写死。第 1 步必须调 scaffold_capture，sessionId 传 "' + sessionId + '"' +
+          var requirement = '基于会话 ' + sessionId + (messageId ? ' 截止到消息 ' + messageId : '') + ' 把已完成的能力固化成插件，目标：生成的插件在同类需求下能稳定复现源会话产出的**全部成果物**的同等质量、格式与落盘（以源会话各成果物原文为基准样本）。注意：一次会话可能产出多份独立成果（如先写公众号文章、再为文章配图提示词），**全部都要固化，不要只盯最后一条回复**。若会话是「先给候选选项 → 我选一个 → 再按所选继续」（如给选题清单让我挑、给方案让我选），插件要保留"出选项 → 等我选 → 按所选继续"这个交互流程，任何一项具体选择都不得被当固定输出写死。**产物形式要钉死**：用 scaffold_capture 返回的 finalFormat 定每份产物的格式，_render 必须传 format + out_dir 把产物落盘成真实文件并回报 outPath（源会话最后是 Word 文档，插件就必须产出 .docx，不是只回 Markdown 文本）。第 1 步必须调 scaffold_capture，sessionId 传 "' + sessionId + '"' +
             (messageId ? '、upToMessageId 传 "' + messageId + '"（只提取到该条回复为止的需求/结果/过程/整段问答）' : '') +
             '；若返回 truncated=true 或 transcriptTruncated=true，必须重跑并传更大 maxResultBytes / maxTranscriptBytes（如 60000）直到拿到全部成果原文。然后按 capability 模板、以 scaffold_capture 返回的**整段问答（transcript）**为依据生成插件，三点硬性要求：' +
             '① assets/examples.json 每份成果物各收录一条「输入 → 该成果完整原文」对照对，output 是该成果物在 transcript 里的完整原文，禁止摘要/改写/缩水；' +
