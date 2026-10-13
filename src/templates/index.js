@@ -237,10 +237,11 @@ function renderCapability(plan) {
     'package.json': pkg(plan),
     'cordis.patch.yml': patch(plan),
     'README.md': `# ${plan.packageName}\n\n${plan.description}\n\n「能力固化」插件：skill 提供步骤/规则/产出契约/少样本示例，${toolPrefix}_validate 机器校验候选产出，${toolPrefix}_render 确定性渲染最终结果。\n\n## 安装\n\n\`\`\`bash\ndsh plugin --profile <profile> add <本目录>\n\`\`\`\n\n## 使用\n\n在会话里描述需求（与 skill 的 whenToUse 匹配时模型会自动加载），或明确要求使用技能「${plan.pluginId}」。按 skill 步骤产出中间结构 → 用 ${toolPrefix}_validate 校验 → 通过后 ${toolPrefix}_render 渲染最终结果。\n`,
-    'assets/skill.md': `# ${plan.description}\n\n<!-- 由生成会话用 scaffold_write_file 填充：把"当时是怎么做的"蒸馏成可复现的步骤、规则与产出契约。模型运行时会加载本技能严格照做。 -->\n\n## 适用场景\n\n<!-- 什么输入适合用本能力；不适用的情形也要写清楚，防止模型误路由 -->\n\n## 原始标杆产出\n\n<!-- 核心节：把源会话最终结果的完整原文贴在这里（不得摘要/缩水），它是质量标杆——运行时对照它决定"做到什么程度"。原文太长时至少完整保留结构与全部关键内容 -->\n\n## 步骤\n\n1. （第 1 步做什么）\n2. （第 2 步做什么）\n3. 产出中间结构（JSON，按原始标杆产出的结构切块），交给 ${toolPrefix}_validate 校验\n4. 校验不通过时按返回的逐条错误修复，重新校验（最多 3 轮）\n5. 校验通过后交给 ${toolPrefix}_render 渲染最终结果（渲染输出必须与原始标杆产出同构：原作 HTML 就渲染 HTML，不得退化成摘要）\n\n## 产出契约\n\n<!-- 中间结构必须满足的字段/格式/质量要求（validate 工具里的规则要与这里一致） -->\n\n## 质量要点（从成功会话沉淀）\n\n<!-- 当时做对了什么：术语、格式偏好、样式约定、边界处理、禁忌 -->\n`,
+    'assets/skill.md': `# ${plan.description}\n\n<!-- 由生成会话用 scaffold_write_file 填充：把"当时是怎么做的"蒸馏成可复现的步骤、规则与产出契约。模型运行时会加载本技能严格照做。源会话若产出了多份成果物（如先写文章、再为文章配图提示词），每个成果物各设一节「原始标杆产出」、各写一套步骤与产物，不要合并。 -->\n\n## 适用场景\n\n<!-- 什么输入适合用本能力；不适用的情形也要写清楚，防止模型误路由 -->\n\n## 原始标杆产出\n\n<!-- 核心节：把源会话某份成果的完整原文贴在这里（不得摘要/缩水），它是质量标杆——运行时对照它决定"做到什么程度"。多份成果时再加「原始标杆产出 2」节。原文太长时至少完整保留结构与全部关键内容。若该份成果是"随输入生成"（输入变了输出就要变，如按所选主题写新文章），本节标杆只作结构 / 风格 / 格式 / 质量对账，本轮的产出必须按用户本次输入生成新内容、不得照搬本节原文。 -->\n\n## 步骤\n\n1. （阶段 1：第 1 步做什么）\n2. （阶段 1：第 2 步做什么）\n3. 产出阶段 1 的中间结构（JSON，按该阶段原始标杆产出的结构切块），交给 ${toolPrefix}_validate 校验\n4. 校验不通过时按返回的逐条错误修复，重新校验（最多 3 轮）\n5. 校验通过后交给 ${toolPrefix}_render 渲染阶段 1 的产物：**传 format=<该阶段产物格式（capture 的 finalFormat，如 docx/html/md）>、out_dir=<落盘目录>，把产物落成真实文件（docx 必填 out_dir）并拿 outPath 回报用户**；不得退化成只回一段 Markdown 文本（原作是 Word 就产出 .docx，是 HTML 就产出 .html）\n6. （阶段 2 起，重复 2-5：以阶段 1 的产物为输入，产出并渲染下一份成果文件）\n\n<!-- 若源会话是"先给候选选项 → 等用户挑 → 按所选继续"的交互流程（如给出选题清单让用户选），在抛出选项后加一步【等待并记录用户的选择】；选项清单本身也是一份落盘交付物（用 ${toolPrefix}_render 落盘并回报给用户），未等到用户明确选择前不要进入下一阶段，不要写死任何具体选项。 -->\n\n## 产出契约\n\n<!-- 每阶段中间结构必须满足的字段/格式/质量要求（validate 工具里的规则要与这里一致）。务必写明每阶段产物格式（docx/html/md/…）与必须落盘——_render 以 format+out_dir 落盘、回报 outPath。若是"随输入生成"环节，把"防照抄"写进 validate：overlapRatio(collectText(candidate), 示例输出) 超过阈值即判不通过，逼模型针对本次输入重写。 -->\n\n## 质量要点（从成功会话沉淀）\n\n<!-- 当时做对了什么：术语、格式偏好、样式约定、边界处理、禁忌 -->\n`,
     'assets/examples.json': `[]\n`,
     'src/harness.js': `// ${plan.packageName}：确定性助手（capability 模板的"手脚"部分，无模型参与，输出完全稳定）。
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 export function loadSkill(path) {
   return readFileSync(path, 'utf8')
@@ -265,32 +266,180 @@ export function formatExamples(examples) {
   }).join('\\n\\n')
 }
 
+// 判定两段文本内容相似度（0~1，Dice 系数，字符 bigram，中英文通用）。
+// 用于 checkContract 的"防照抄"规则：当某环节的产出随输入变化（如按所选主题写新文章）
+// 时，候选内容与示例输出的原文不应高度相似——照搬示例=没按新输入生成，要判不通过。
+export function overlapRatio(a, b) {
+  const grams = (s) => {
+    const t = String(s ?? '').replace(/\\s+/g, '').toLowerCase()
+    if (!t) return new Set()
+    const set = new Set()
+    if (t.length <= 2) { set.add(t); return set }
+    for (let i = 0; i < t.length - 1; i++) set.add(t.slice(i, i + 2))
+    return set
+  }
+  const sa = grams(a); const sb = grams(b)
+  if (!sa.size || !sb.size) return 0
+  let common = 0
+  for (const g of sa) if (sb.has(g)) common++
+  return (2 * common) / (sa.size + sb.size)
+}
+
+// 把候选结构里的正文文本抽出来（用于与示例对比防照抄）
+export function collectText(candidate) {
+  const parts = []
+  const walk = (node) => {
+    if (Array.isArray(node)) { for (const b of node) walk(b); return }
+    if (node && typeof node === 'object') {
+      if (typeof node.text === 'string') parts.push(node.text)
+      if (Array.isArray(node.items)) parts.push(...node.items.map(String))
+      for (const k of Object.keys(node)) if (Array.isArray(node[k])) for (const x of node[k]) walk(x)
+    }
+  }
+  walk(candidate)
+  return parts.join('\\n')
+}
+
 // 产出契约校验：TODO 由生成会话把"产出契约"落实成具体规则（字段、格式、数值范围…）。
 // 规则必须是确定性的（纯函数），模型只负责产出候选，合格与否由这里机器判定。
+// 默认接受"对象（含 sections）"或"块列表"，并校验块类型合法；具体规则由生成会话按 skill.md 覆盖。
 export function checkContract(candidate) {
   const errors = []
-  if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
-    errors.push('产出必须是 JSON object')
+  const isBlock = (b) => !!b && typeof b === 'object' && ['heading', 'para', 'list', 'table'].includes(b.type)
+  if (Array.isArray(candidate)) {
+    if (candidate.length === 0) errors.push('产出块列表为空')
+    else for (const b of candidate) if (!isBlock(b)) errors.push('产出块无效: ' + JSON.stringify(b).slice(0, 40))
+    return { ok: errors.length === 0, errors, normalized: errors.length === 0 ? candidate : null }
+  }
+  if (candidate === null || typeof candidate !== 'object') {
+    errors.push('产出必须是中间结构（对象或块列表）')
     return { ok: false, errors, normalized: null }
   }
   const keys = Object.keys(candidate)
   if (keys.length === 0) errors.push('产出不能为空对象')
-  for (const k of keys) {
-    const v = candidate[k]
-    if (v === null || v === undefined || v === '') errors.push(\`字段 \${k} 为空\`)
-  }
+  for (const k of keys) { const v = candidate[k]; if (v === null || v === undefined || v === '') errors.push(\`字段 \${k} 为空\`) }
+  if (candidate.sections !== undefined && !Array.isArray(candidate.sections)) errors.push('sections 必须是数组')
   // TODO: 按 assets/skill.md 的"产出契约"增加具体规则
   return { ok: errors.length === 0, errors, normalized: errors.length === 0 ? candidate : null }
 }
 
-// 确定性渲染：中间结构 → 最终输出格式（Markdown 优先），消除模型自由发挥的最后一公里。
-export function renderResult(data, format = 'markdown') {
-  if (format === 'json') return JSON.stringify(data, null, 2)
-  const lines = []
-  for (const [k, v] of Object.entries(data)) {
-    lines.push(\`## \${k}\`, '', typeof v === 'string' ? v : '\`\`\`json\\n' + JSON.stringify(v, null, 2) + '\\n\`\`\`', '')
+// ---- 确定性渲染：中间结构 → 真实产物文件。约定中间结构为"块列表"：
+// [{type:'heading',level,text} | {type:'para',text} | {type:'list',items:[...]} | {type:'table',header:[...],rows:[[...]]}]
+// 或 { sections: [{ title?, heading?, blocks:[块...] }] }。md/html/txt/json/csv 由文本渲染，docx 由同名块生成。
+
+export function normalizeBlocks(data) {
+  if (Array.isArray(data)) {
+    if (data.length && data[0] && typeof data[0] === 'object' && ['heading', 'para', 'list', 'table'].includes(data[0].type)) return data
+    return [{ type: 'table', header: Array.isArray(data[0]) ? data[0] : [], rows: data.slice(1) }]
   }
-  return lines.join('\\n').trim()
+  if (data && Array.isArray(data.sections)) {
+    const out = []
+    for (const s of data.sections) {
+      if (s.title) out.push({ type: 'heading', level: 1, text: typeof s.title === 'string' ? s.title : String(s.title) })
+      if (s.heading) out.push({ type: 'heading', level: 1, text: typeof s.heading === 'string' ? s.heading : String(s.heading.text ?? '') })
+      if (Array.isArray(s.blocks)) for (const b of s.blocks) out.push(b)
+    }
+    return out
+  }
+  if (data && typeof data === 'object') return Object.entries(data).flatMap(([k, v]) => {
+    if (Array.isArray(v)) return [{ type: 'heading', level: 1, text: k }, { type: 'list', items: v.map((x) => (x && typeof x === 'object' ? JSON.stringify(x) : String(x ?? ''))) }]
+    if (v && typeof v === 'object') return [{ type: 'heading', level: 1, text: k }, { type: 'para', text: JSON.stringify(v, null, 2) }]
+    return [{ type: 'heading', level: 1, text: k }, { type: 'para', text: String(v ?? '') }]
+  })
+  return [{ type: 'para', text: String(data ?? '') }]
+}
+
+function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) }
+
+function blockMarkdown(b) {
+  if (b.type === 'heading') return \`\${'#'.repeat(Math.max(1, Math.min(6, Number(b.level) || 1)))} \${String(b.text ?? '')}\`
+  if (b.type === 'para') return String(b.text ?? '')
+  if (b.type === 'list') return (b.items ?? []).map((it) => '- ' + String(it)).join('\\n')
+  if (b.type === 'table') {
+    const head = b.header ?? []
+    const rows = b.rows ?? []
+    const f = (arr) => arr.map((c) => String(c ?? '')).join(' | ')
+    const len = head.length || (rows[0] && Array.isArray(rows[0]) ? rows[0].length : 1)
+    const out = [f(head), Array.from({ length: len }, () => '---').join(' | ')]
+    for (const r of rows) out.push(f(Array.isArray(r) ? r : [r]))
+    return out.filter((l) => l.trim() !== '').join('\\n')
+  }
+  return ''
+}
+
+function blockHtml(b) {
+  if (b.type === 'heading') { const lv = Math.max(1, Math.min(6, Number(b.level) || 1)); return \`<h\${lv}>\${escapeHtml(b.text)}</h\${lv}>\` }
+  if (b.type === 'para') return \`<p>\${escapeHtml(b.text)}</p>\`
+  if (b.type === 'list') return \`<ul>\${(b.items ?? []).map((it) => \`<li>\${escapeHtml(it)}</li>\`).join('')}</ul>\`
+  if (b.type === 'table') {
+    const head = (b.header ?? []).map((c) => \`<th>\${escapeHtml(c)}</th>\`).join('')
+    const body = (b.rows ?? []).map((r) => \`<tr>\${(Array.isArray(r) ? r : [r]).map((c) => \`<td>\${escapeHtml(c)}</td>\`).join('')}</tr>\`).join('')
+    return \`<table><tr>\${head}</tr>\${body}</table>\`
+  }
+  return ''
+}
+
+function renderCsv(data) {
+  const rows = Array.isArray(data) ? data : (Array.isArray(data?.rows) ? data.rows : [])
+  return rows.map((r) => {
+    const cells = Array.isArray(r) ? r : Object.values(r)
+    return cells.map((c) => { const s = String(c ?? ''); return /[",\\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s }).join(',')
+  }).join('\\n')
+}
+
+function renderText(data, format) {
+  if (format === 'json') return JSON.stringify(data, null, 2)
+  if (format === 'csv') return renderCsv(data)
+  const blocks = normalizeBlocks(data)
+  if (format === 'html') {
+    const h = blocks.find((b) => b.type === 'heading')
+    const title = escapeHtml(h?.text ?? '产物')
+    return \`<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>\${title}</title></head><body>\${blocks.map(blockHtml).join('')}</body></html>\`
+  }
+  return blocks.map(blockMarkdown).join('\\n\\n').trim()
+}
+
+async function renderDocx(data) {
+  const blocks = normalizeBlocks(data)
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx')
+  const H = [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4, HeadingLevel.HEADING_5, HeadingLevel.HEADING_6]
+  const children = []
+  for (const b of blocks) {
+    if (b.type === 'heading') { const lv = Math.max(1, Math.min(6, Number(b.level) || 1)); children.push(new Paragraph({ text: String(b.text ?? ''), heading: H[lv - 1] })) }
+    else if (b.type === 'para') children.push(new Paragraph({ children: [new TextRun({ text: String(b.text ?? ''), size: 24 })] }))
+    else if (b.type === 'list') for (const it of (b.items ?? [])) children.push(new Paragraph({ text: String(it), bullet: { level: 0 } }))
+  }
+  const doc = new Document({ sections: [{ children }] })
+  const buf = await Packer.toBuffer(doc)
+  return { buf, blocks }
+}
+
+const EXT = { markdown: 'md', md: 'md', html: 'html', json: 'json', csv: 'csv', txt: 'txt', plain: 'txt', docx: 'docx' }
+
+function writeOut(outDir, name, buf, format, preview) {
+  const dir = String(outDir ?? '')
+  if (!dir) throw new Error('产物落盘需要提供 out_dir（目录）')
+  mkdirSync(dir, { recursive: true })
+  const outPath = join(dir, name)
+  writeFileSync(outPath, buf)
+  return { result: preview, outPath, format, files: [outPath] }
+}
+
+// 确定性渲染：中间结构 → 真实产物文件。传 format 钉死产物形态；docx 由结构生成真实 .docx。
+// 有 out_dir 则写盘并返回 outPath/files；无 out_dir（除 docx）则仅返回文本预览（向后兼容）。
+export async function renderArtifacts(data, opts = {}) {
+  const format = String(opts.format ?? 'md')
+  const ext = EXT[format] ?? 'md'
+  const base = String(opts.base_name ?? 'output')
+  const name = base + (opts.stage ? '_' + String(opts.stage) : '') + '.' + ext
+  if (format === 'docx') {
+    const { buf } = await renderDocx(data)
+    if (!opts.out_dir) throw new Error('docx 产物必须提供 out_dir 落盘目录')
+    return writeOut(opts.out_dir, name, Buffer.from(buf), format, \`已渲染 .docx 产物：\${name}\`)
+  }
+  const text = renderText(data, format)
+  if (!opts.out_dir) return { result: text, format }
+  return writeOut(opts.out_dir, name, Buffer.from(text, 'utf8'), format, text.slice(0, 2000) + (text.length > 2000 ? '\\n…[预览截断]' : ''))
 }
 `,
     'src/index.js': `// ${plan.packageName}：${plan.description}
@@ -298,7 +447,7 @@ export function renderResult(data, format = 'markdown') {
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { checkContract, formatExamples, loadExamples, loadSkill, renderResult } from './harness.js'
+import { checkContract, formatExamples, loadExamples, loadSkill, renderArtifacts } from './harness.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const skillContent = loadSkill(join(root, 'assets', 'skill.md'))
@@ -321,12 +470,12 @@ export function apply(ctx) {
   // 校验工具：机器判定候选产出是否符合契约，不通过给出逐条错误供模型自修复
   ctx.tools.register(defineTool({
     name: '${toolPrefix}_validate',
-    description: '校验候选产出（中间结构 JSON）是否符合本插件的产出契约。返回 ok / 逐条错误 / 归一化后的产出。校验通过后再用 ${toolPrefix}_render 渲染最终结果。',
+    description: '校验候选产出（中间结构 JSON）是否符合本插件的产出契约。返回 ok / 逐条错误 / 归一化后的产出。校验通过后再用 ${toolPrefix}_render 渲染最终产物（真实文件落盘）。',
     parameters: {
       candidate: {
         type: 'json',
         required: true,
-        description: '待校验的候选产出（中间结构）',
+        description: '待校验的候选产出（中间结构：块列表或含 sections 的对象）',
       },
     },
     output: {
@@ -347,19 +496,31 @@ export function apply(ctx) {
     },
   }))
 
-  // 渲染工具：中间结构 → 最终输出，纯确定性代码
+  // 渲染工具：中间结构 → 真实产物文件落盘（含 .docx）。format 钉死产物形态、out_dir 决定落盘。
   ctx.tools.register(defineTool({
     name: '${toolPrefix}_render',
-    description: '把 ${toolPrefix}_validate 校验通过的中间结构确定性地渲染成最终输出（默认 Markdown）。',
+    description: '把校验通过的中间结构确定性地渲染成最终产物的真实文件（markdown/html/json/csv/txt/docx）。传 format 钉死产物形态、out_dir 指定落盘目录（docx 必填），返回 outPath。这是把产物规约为固定格式（如 .docx Word 文档）的唯一入口，不要用其它方式落盘产物。',
     parameters: {
       data: {
         type: 'json',
         required: true,
-        description: '校验通过的中间结构',
+        description: '校验通过的中间结构（块列表或 sections 结构）',
       },
       format: {
         type: 'string',
-        description: '输出格式：markdown（默认）或 json',
+        description: '产物格式：md/html/json/csv/txt/docx，缺省 md',
+      },
+      out_dir: {
+        type: 'string',
+        description: '产物落盘目录（绝对路径）。docx 必填；其它格式给定时也写盘',
+      },
+      base_name: {
+        type: 'string',
+        description: '产物文件名（不含扩展名），缺省插件名',
+      },
+      stage: {
+        type: 'string',
+        description: '多阶段会话中区分各阶段产物时填阶段名，用于文件名后缀',
       },
     },
     output: {
@@ -368,13 +529,16 @@ export function apply(ctx) {
         additionalProperties: false,
         properties: {
           result: { type: 'string', required: true },
+          outPath: { type: 'string' },
+          format: { type: 'string' },
+          files: { type: 'array' },
         },
       },
-      render: (args, value) => [{ type: 'text', text: value.result }],
+      render: (args, value) => [{ type: 'text', text: value.result + (value.outPath ? '\\n产物: ' + value.outPath : '') }],
     },
     execute: async (args, exec) => {
       exec.signal?.throwIfAborted()
-      return { result: renderResult(args.data, args.format ?? 'markdown') }
+      return renderArtifacts(args.data, { format: args.format ?? 'md', out_dir: args.out_dir, base_name: args.base_name ?? '${plan.pluginId}', stage: args.stage })
     },
   }))
 }

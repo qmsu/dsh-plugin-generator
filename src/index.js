@@ -26,6 +26,7 @@ export const Config = z.object({
     'papaparse',
     'yaml',
     'marked',
+    'docx',
   ]),
 })
 
