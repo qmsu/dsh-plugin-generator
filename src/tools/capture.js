@@ -122,7 +122,19 @@ function parseSession(text, upToMessageId) {
     if (e.type === 'tool/call' && inScope(e) && e.data?.name && !procedure.includes(e.data.name)) procedure.push(String(e.data.name))
   }
   const turns = events.filter((e) => e.type === 'turn/end' && inScope(e)).length
-  return { title, requirement, finalResult, procedure, turns }
+
+  // 整段问答原文（transcript）：范围内、有文本的对话块按序排出。
+  // 一个会话可能产出多个成果物（如文章 + 配图提示词），单靠 finalResult 只拿到最后一条，
+  // 制作会话看不到更早的产物。transcript 把每个阶段的原文都交出来，供按阶段固化成多个 标杆/示例/产物。
+  const transcript = []
+  for (const e of events) {
+    if (!inScope(e)) continue
+    const t = e.type === 'user/message' && e.data?.source?.kind === 'user'
+      ? contentText(e.data?.content, true)
+      : e.type === 'assistant/message' ? contentText(e.data?.message?.content, true) : ''
+    if (t) transcript.push({ role: e.type === 'assistant/message' ? 'assistant' : 'user', text: t })
+  }
+  return { title, requirement, finalResult, procedure, turns, transcript }
 }
 
 export function registerCaptureTool(ctx) {
@@ -144,7 +156,11 @@ export function registerCaptureTool(ctx) {
       },
       upToMessageId: {
         type: 'string',
-        description: '固化范围截止的 assistant 消息 id（会话日志里 assistant/message 的 message.id）。给定后只提取到该条回复为止（含）的需求/结果/过程；缺省为整段会话',
+        description: '固化范围截止的 assistant 消息 id（会话日志里 assistant/message 的 message.id）。给定后只提取到该条回复为止（含）的需求/结果/过程/整段问答；缺省为整段会话',
+      },
+      maxTranscriptBytes: {
+        type: 'integer',
+        description: '整段问答 transcript 文本抽取上限（UTF-8 字节），默认 60000。会话产出多个成果物（如文章 + 配图提示词）时，transcript 是识别各阶段成果的关键，别用小值',
       },
     },
     output: {
@@ -159,12 +175,15 @@ export function registerCaptureTool(ctx) {
           procedure: { type: 'array', required: true },
           turns: { type: 'integer', required: true },
           truncated: { type: 'boolean', required: true },
+          transcript: { type: 'string' },
+          transcriptTruncated: { type: 'boolean' },
         },
       },
       render: (args, value) => textBlock(
         `会话素材（${value.sessionId}${value.title ? `，${value.title}` : ''}，${value.turns} 轮）\n\n` +
         `【需求原文】\n${value.requirement || '（未取到）'}\n\n` +
         `【最终结果】${value.truncated ? '（已截断）' : ''}\n${value.finalResult || '（未取到）'}\n\n` +
+        `【整段问答】${value.transcript != null ? `${Math.round(value.transcript.length / 1024)}KB（${value.transcriptTruncated ? '已截断' : '全文'}，正快速核对：识别有哪些独立的成果物/阶段）` : ''}\n` +
         `【当时用到的工具】${value.procedure.join(' → ') || '（无）'}`,
       ),
     },
@@ -191,7 +210,15 @@ export function registerCaptureTool(ctx) {
         finalResult = Buffer.from(finalResult, 'utf8').subarray(0, maxResultBytes).toString('utf8') + '\n…[已截断]'
         truncated = true
       }
-      return { sessionId: id, title: parsed.title, requirement: parsed.requirement, finalResult, procedure: parsed.procedure, turns: parsed.turns, truncated }
+      // 整段问答拼成可读文本，按字节截断
+      const maxTranscriptBytes = Number(args.maxTranscriptBytes ?? 60000)
+      let transcript = String(parsed.transcript.map((t) => `【${t.role === 'user' ? '用户' : '助手'}】${t.text}`).join('\n\n'))
+      let transcriptTruncated = false
+      if (Buffer.byteLength(transcript, 'utf8') > maxTranscriptBytes) {
+        transcript = Buffer.from(transcript, 'utf8').subarray(0, maxTranscriptBytes).toString('utf8') + '\n…[transcript 已截断，重跑请传更大 maxTranscriptBytes]'
+        transcriptTruncated = true
+      }
+      return { sessionId: id, title: parsed.title, requirement: parsed.requirement, finalResult, procedure: parsed.procedure, turns: parsed.turns, truncated, transcript, transcriptTruncated }
     },
   }))
 }
