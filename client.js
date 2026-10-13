@@ -729,7 +729,8 @@ window.__ModuleLoader__.load({
             '；若返回 truncated=true 或 transcriptTruncated=true，必须重跑并传更大 maxResultBytes / maxTranscriptBytes（如 60000）直到拿到全部成果原文。然后按 capability 模板、以 scaffold_capture 返回的**整段问答（transcript）**为依据生成插件，三点硬性要求：' +
             '① assets/examples.json 每份成果物各收录一条「输入 → 该成果完整原文」对照对，output 是该成果物在 transcript 里的完整原文，禁止摘要/改写/缩水；' +
             '② assets/skill.md 每份成果物各设一节「原始标杆产出」把原文全文收进去作质量标杆，步骤按先后阶段写清（如 阶段1 产出文章 → 阶段2 以文章为输入产出配图提示词），并写清各阶段可机器检查的产出契约（checkContract 的规则要从各成果原文提炼：必备章节/字段、长度下限、关键内容特征）；' +
-            '③ 渲染必须复现源会话**全部**成果、同文件集同格式（如 文章.md 与 配图提示词.md），每阶段渲染成它那份文件，不得合并或退化成 Markdown 摘要。交付前逐阶段用 examples 里的输入重放 validate→render 自验收，确认各成果都与源会话同构。最后校验打包。'
+            '③ 渲染必须复现源会话**全部**成果、同文件集同格式（如 文章.md 与 配图提示词.md），每阶段渲染成它那份文件，不得合并或退化成 Markdown 摘要。交付前逐阶段用 examples 里的输入重放 validate→render 自验收，确认各成果都与源会话同构。' +
+            '④ **输入会变化的环节（如选了主题 N 就写 N 的主题文章）必须以本次输入为准生成新内容**，示例与标杆只定结构/风格/格式/质量下限，禁止照搬示例原文；checkContract 要用 overlapRatio(collectText(candidate), 示例输出) 防照抄，相似度过高（如 >0.5）判不通过，逼模型针对本次所选重写。最后校验打包。'
           request('POST', '/plugin-scaffold/make', { requirement: requirement, templateHint: 'capability', referenceText: '' }).then(function (res) {
             if (!(res.ok && res.body.ok)) { setState('idle'); return }
             if (!host.sessions) { setState('done'); return }

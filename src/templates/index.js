@@ -237,7 +237,7 @@ function renderCapability(plan) {
     'package.json': pkg(plan),
     'cordis.patch.yml': patch(plan),
     'README.md': `# ${plan.packageName}\n\n${plan.description}\n\n「能力固化」插件：skill 提供步骤/规则/产出契约/少样本示例，${toolPrefix}_validate 机器校验候选产出，${toolPrefix}_render 确定性渲染最终结果。\n\n## 安装\n\n\`\`\`bash\ndsh plugin --profile <profile> add <本目录>\n\`\`\`\n\n## 使用\n\n在会话里描述需求（与 skill 的 whenToUse 匹配时模型会自动加载），或明确要求使用技能「${plan.pluginId}」。按 skill 步骤产出中间结构 → 用 ${toolPrefix}_validate 校验 → 通过后 ${toolPrefix}_render 渲染最终结果。\n`,
-    'assets/skill.md': `# ${plan.description}\n\n<!-- 由生成会话用 scaffold_write_file 填充：把"当时是怎么做的"蒸馏成可复现的步骤、规则与产出契约。模型运行时会加载本技能严格照做。源会话若产出了多份成果物（如先写文章、再为文章配图提示词），每个成果物各设一节「原始标杆产出」、各写一套步骤与产物，不要合并。 -->\n\n## 适用场景\n\n<!-- 什么输入适合用本能力；不适用的情形也要写清楚，防止模型误路由 -->\n\n## 原始标杆产出\n\n<!-- 核心节：把源会话某份成果的完整原文贴在这里（不得摘要/缩水），它是质量标杆——运行时对照它决定"做到什么程度"。多份成果时再加「原始标杆产出 2」节。原文太长时至少完整保留结构与全部关键内容 -->\n\n## 步骤\n\n1. （阶段 1：第 1 步做什么）\n2. （阶段 1：第 2 步做什么）\n3. 产出阶段 1 的中间结构（JSON，按该阶段原始标杆产出的结构切块），交给 ${toolPrefix}_validate 校验\n4. 校验不通过时按返回的逐条错误修复，重新校验（最多 3 轮）\n5. 校验通过后交给 ${toolPrefix}_render 渲染阶段 1 的产物：**传 format=<该阶段产物格式（capture 的 finalFormat，如 docx/html/md）>、out_dir=<落盘目录>，把产物落成真实文件（docx 必填 out_dir）并拿 outPath 回报用户**；不得退化成只回一段 Markdown 文本（原作是 Word 就产出 .docx，是 HTML 就产出 .html）\n6. （阶段 2 起，重复 2-5：以阶段 1 的产物为输入，产出并渲染下一份成果文件）\n\n<!-- 若源会话是"先给候选选项 → 等用户挑 → 按所选继续"的交互流程（如给出选题清单让用户选），在抛出选项后加一步【等待并记录用户的选择】；选项清单本身也是一份落盘交付物（用 ${toolPrefix}_render 落盘并回报给用户），未等到用户明确选择前不要进入下一阶段，不要写死任何具体选项。 -->\n\n## 产出契约\n\n<!-- 每阶段中间结构必须满足的字段/格式/质量要求（validate 工具里的规则要与这里一致）。务必写明每阶段产物格式（docx/html/md/…）与必须落盘——_render 以 format+out_dir 落盘、回报 outPath -->\n\n## 质量要点（从成功会话沉淀）\n\n<!-- 当时做对了什么：术语、格式偏好、样式约定、边界处理、禁忌 -->\n`,
+    'assets/skill.md': `# ${plan.description}\n\n<!-- 由生成会话用 scaffold_write_file 填充：把"当时是怎么做的"蒸馏成可复现的步骤、规则与产出契约。模型运行时会加载本技能严格照做。源会话若产出了多份成果物（如先写文章、再为文章配图提示词），每个成果物各设一节「原始标杆产出」、各写一套步骤与产物，不要合并。 -->\n\n## 适用场景\n\n<!-- 什么输入适合用本能力；不适用的情形也要写清楚，防止模型误路由 -->\n\n## 原始标杆产出\n\n<!-- 核心节：把源会话某份成果的完整原文贴在这里（不得摘要/缩水），它是质量标杆——运行时对照它决定"做到什么程度"。多份成果时再加「原始标杆产出 2」节。原文太长时至少完整保留结构与全部关键内容。若该份成果是"随输入生成"（输入变了输出就要变，如按所选主题写新文章），本节标杆只作结构 / 风格 / 格式 / 质量对账，本轮的产出必须按用户本次输入生成新内容、不得照搬本节原文。 -->\n\n## 步骤\n\n1. （阶段 1：第 1 步做什么）\n2. （阶段 1：第 2 步做什么）\n3. 产出阶段 1 的中间结构（JSON，按该阶段原始标杆产出的结构切块），交给 ${toolPrefix}_validate 校验\n4. 校验不通过时按返回的逐条错误修复，重新校验（最多 3 轮）\n5. 校验通过后交给 ${toolPrefix}_render 渲染阶段 1 的产物：**传 format=<该阶段产物格式（capture 的 finalFormat，如 docx/html/md）>、out_dir=<落盘目录>，把产物落成真实文件（docx 必填 out_dir）并拿 outPath 回报用户**；不得退化成只回一段 Markdown 文本（原作是 Word 就产出 .docx，是 HTML 就产出 .html）\n6. （阶段 2 起，重复 2-5：以阶段 1 的产物为输入，产出并渲染下一份成果文件）\n\n<!-- 若源会话是"先给候选选项 → 等用户挑 → 按所选继续"的交互流程（如给出选题清单让用户选），在抛出选项后加一步【等待并记录用户的选择】；选项清单本身也是一份落盘交付物（用 ${toolPrefix}_render 落盘并回报给用户），未等到用户明确选择前不要进入下一阶段，不要写死任何具体选项。 -->\n\n## 产出契约\n\n<!-- 每阶段中间结构必须满足的字段/格式/质量要求（validate 工具里的规则要与这里一致）。务必写明每阶段产物格式（docx/html/md/…）与必须落盘——_render 以 format+out_dir 落盘、回报 outPath。若是"随输入生成"环节，把"防照抄"写进 validate：overlapRatio(collectText(candidate), 示例输出) 超过阈值即判不通过，逼模型针对本次输入重写。 -->\n\n## 质量要点（从成功会话沉淀）\n\n<!-- 当时做对了什么：术语、格式偏好、样式约定、边界处理、禁忌 -->\n`,
     'assets/examples.json': `[]\n`,
     'src/harness.js': `// ${plan.packageName}：确定性助手（capability 模板的"手脚"部分，无模型参与，输出完全稳定）。
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -264,6 +264,40 @@ export function formatExamples(examples) {
     const output = typeof ex.output === 'string' ? ex.output : JSON.stringify(ex.output, null, 2)
     return \`### 示例 \${i + 1}\\n\\n输入：\\n\\\`\\\`\\\`\\n\${input}\\n\\\`\\\`\\\`\\n\\n产出（应达到的水准）：\\n\\\`\\\`\\\`\\n\${output}\\n\\\`\\\`\\\`\`
   }).join('\\n\\n')
+}
+
+// 判定两段文本内容相似度（0~1，Dice 系数，字符 bigram，中英文通用）。
+// 用于 checkContract 的"防照抄"规则：当某环节的产出随输入变化（如按所选主题写新文章）
+// 时，候选内容与示例输出的原文不应高度相似——照搬示例=没按新输入生成，要判不通过。
+export function overlapRatio(a, b) {
+  const grams = (s) => {
+    const t = String(s ?? '').replace(/\\s+/g, '').toLowerCase()
+    if (!t) return new Set()
+    const set = new Set()
+    if (t.length <= 2) { set.add(t); return set }
+    for (let i = 0; i < t.length - 1; i++) set.add(t.slice(i, i + 2))
+    return set
+  }
+  const sa = grams(a); const sb = grams(b)
+  if (!sa.size || !sb.size) return 0
+  let common = 0
+  for (const g of sa) if (sb.has(g)) common++
+  return (2 * common) / (sa.size + sb.size)
+}
+
+// 把候选结构里的正文文本抽出来（用于与示例对比防照抄）
+export function collectText(candidate) {
+  const parts = []
+  const walk = (node) => {
+    if (Array.isArray(node)) { for (const b of node) walk(b); return }
+    if (node && typeof node === 'object') {
+      if (typeof node.text === 'string') parts.push(node.text)
+      if (Array.isArray(node.items)) parts.push(...node.items.map(String))
+      for (const k of Object.keys(node)) if (Array.isArray(node[k])) for (const x of node[k]) walk(x)
+    }
+  }
+  walk(candidate)
+  return parts.join('\\n')
 }
 
 // 产出契约校验：TODO 由生成会话把"产出契约"落实成具体规则（字段、格式、数值范围…）。
