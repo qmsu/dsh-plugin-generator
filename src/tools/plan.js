@@ -1,7 +1,7 @@
 // scaffold_plan：把模型的计划草案规范化并校验，产出最终计划。
 // 价值：插件名/模板/依赖这些"规矩"由工具兜底，模型只负责想清楚做什么。
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { isValidKebab, pretty, textBlock, toKebabCase, toSnakeCase } from './util.js'
+import { isValidKebab, pretty, textBlock, toKebabCase, toSnakeCase, coerceJson } from './util.js'
 
 const TEMPLATES = ['tool', 'events', 'file', 'capability', 'toolkit']
 
@@ -55,7 +55,8 @@ export function registerPlanTool(ctx, config) {
     },
     execute: async (args) => {
       const warnings = []
-      const draft = args.plan && typeof args.plan === 'object' ? args.plan : {}
+      const parsed = coerceJson(args.plan, {})
+      const draft = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
 
       // 插件 id：草案给出就规范化，否则从需求抓前几个实词，再退化到随机名
       let pluginId = toKebabCase(draft.pluginId ?? draft.name ?? '')
@@ -105,7 +106,8 @@ export function registerPlanTool(ctx, config) {
 
       // 依赖白名单；用户明确批准的依赖（approvedDependencies）可放行
       const allowed = new Set(config.allowedDependencies)
-      const approved = new Set(Array.isArray(args.approvedDependencies) ? args.approvedDependencies.map(String) : [])
+      const approvedList = coerceJson(args.approvedDependencies, [])
+      const approved = new Set(Array.isArray(approvedList) ? approvedList.map(String) : [])
       const dependencies = Array.isArray(draft.dependencies) ? draft.dependencies.map(String) : []
       const rejected = dependencies.filter((d) => !allowed.has(d) && !approved.has(d))
       if (rejected.length) {

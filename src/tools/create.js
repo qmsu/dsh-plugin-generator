@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { TEMPLATES } from '../templates/index.js'
 import { getOutputDir } from '../settings.js'
-import { pretty, textBlock } from './util.js'
+import { pretty, textBlock, coerceJson } from './util.js'
 
 export function registerCreateTool(ctx, config) {
   ctx.tools.register(defineTool({
@@ -36,9 +36,9 @@ export function registerCreateTool(ctx, config) {
       ),
     },
     execute: async (args) => {
-      const plan = args.plan
-      if (!plan || typeof plan !== 'object' || !plan.pluginId || !plan.template) {
-        throw new Error('plan 参数无效：需要 scaffold_plan 返回的完整计划对象')
+      const plan = coerceJson(args.plan)
+      if (!plan || typeof plan !== 'object' || Array.isArray(plan) || !plan.pluginId || !plan.template) {
+        throw new Error('plan 参数无效：需要 scaffold_plan 返回的完整计划对象（对象或 JSON 字符串均可）')
       }
       const render = TEMPLATES[plan.template]
       if (!render) throw new Error(`未知模板: ${plan.template}（可选：${Object.keys(TEMPLATES).join(' / ')}）`)

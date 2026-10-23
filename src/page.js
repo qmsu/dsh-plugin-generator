@@ -1,6 +1,6 @@
 // 「制作插件」Web 页面的 host 半区：HTTP 路由（设置/列表/制作/插件操作/导出）+ 会话创建。
 // 仅在 web 宿主生效（webServer 与 webhookRuntime 服务可用时自动装载，headless 等环境静默跳过）。
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -70,9 +70,17 @@ function changeBody(r) {
     application: r.application,
     enabled: r.enabled,
     error: r.error?.code,
-    diagnostic: r.error?.diagnostic,
+    diagnostic: shortDiagnostic(r.error?.diagnostic),
     warnings: r.warnings,
   }
+}
+
+// pnpm 日志很长，提取关键错误行（ERR_ 码 / error 行），没有则取末尾几行
+function shortDiagnostic(text) {
+  if (!text) return text
+  const lines = String(text).split('\n').map((l) => l.trim()).filter(Boolean)
+  const errs = lines.filter((l) => /ERR_[A-Z_]+|error:|Error:/.test(l))
+  return (errs.length ? errs : lines.slice(-3)).slice(-4).join('\n')
 }
 
 // 扫描 ~/.dsh/profiles 下的 profile 名；current = process 运行时所在的 profile（profileContext.name）
@@ -107,6 +115,68 @@ function exportPlugin(pluginDir, outputRoot) {
   return zipPath
 }
 
+// 直连创建会话：dsh 0.2.1 起 web 模式不再携带 dsh-webhook（webhookRuntime 服务消失），
+// 这里按 webhook 同款流程用核心服务（agents / workspaceRegistry / agentPresets / …）建会话。
+// 注意：本插件只 inject 了 tools/skills，这些服务一律 ctx.get 取（未声明 inject 时
+// 属性代理访问会抛 "cannot get property ... without inject"）；缺服务时给清晰报错。
+async function createScaffoldSession(ctx, { workspacePath, title, prompt }) {
+  const { createUserMessage } = await import('@deepseek-ai/dsh-llm')
+  const deps = {
+    agentDefaultModel: ctx.get('agentDefaultModel'),
+    agentPresets: ctx.get('agentPresets'),
+    permissionPresets: ctx.get('permissionPresets'),
+    workspaceRegistry: ctx.get('workspaceRegistry'),
+    agents: ctx.get('agents'),
+    sessionTitle: ctx.get('sessionTitle'),
+  }
+  const missing = Object.keys(deps).filter((name) => !deps[name])
+  if (missing.length) throw new Error(`当前 dsh 组合缺少服务：${missing.join(', ')}（直连建会话不可用）`)
+  const { agentDefaultModel, agentPresets, permissionPresets, workspaceRegistry, agents, sessionTitle } = deps
+  const selected = agentDefaultModel.currentSelection()
+  const agentOptions = { provider: selected.provider, model: selected.model }
+  permissionPresets.resolve('workspace-write') // 预设存在性校验，失败尽早报错
+  const preset = await agentPresets.resolve('standard')
+  // 作用域租约：setup 把 preset 行挂进 Agent 作用域前必须保活
+  const scope = await agentPresets.acquireScope(preset.id)
+  try {
+    const workspace = await workspaceRegistry.create(workspacePath)
+    const sessionId = `webhook-${randomUUID()}`
+    const handle = await agents.create({
+      sessionId,
+      meta: { cwd: workspace.path, agentPreset: preset.id },
+      agentOptions,
+      setup: async (agentCtx) => {
+        await agentPresets.mount(agentCtx, preset.id)
+        // 创建时选中的 reasoningEffort 只作用到首个正式请求（与 webhook 同款）
+        agentCtx.on('agent/request', async ({ agent }, next) => {
+          const resolved = await next()
+          if (agent.session.requestHeader() !== undefined || resolved.provider !== selected.provider || resolved.model !== selected.model) return resolved
+          const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
+          return selected.reasoningEffort === undefined ? withoutInheritedEffort : { ...withoutInheritedEffort, reasoningEffort: selected.reasoningEffort }
+        })
+      },
+    })
+    let attached = false
+    try {
+      await workspace.attachSession(sessionId)
+      attached = true
+      permissionPresets.set(handle.agent.session, 'workspace-write')
+      sessionTitle.rename(handle.agent.session, title)
+      handle.agent.followup(createUserMessage({
+        content: [{ type: 'text', text: prompt }],
+        source: { kind: 'user' },
+      }))
+      return sessionId
+    } catch (e) {
+      if (attached) try { await workspace.detachSession(sessionId) } catch {}
+      try { await handle.dispose() } catch {}
+      throw e
+    }
+  } finally {
+    await scope[Symbol.asyncDispose]?.()
+  }
+}
+
 export function registerScaffoldPage(ctx, config) {
   // CSRF token：随机生成，经 index 注入给同源的浏览器页面，跨站攻击者读不到
   const token = randomBytes(24).toString('base64url')
@@ -117,26 +187,30 @@ export function registerScaffoldPage(ctx, config) {
   const tryMount = () => {
     if (disposeRoute) return // 已挂载（不处理服务反复起伏的极端情况）
     const webServer = ctx.get('webServer')
-    const webhookRuntime = ctx.get('webhookRuntime')
-    if (!webServer || !webhookRuntime) return
+    if (!webServer) return
+    // webhookRuntime 在 dsh 0.2.1 起的 web 模式不再携带（dsh-webhook 移入 devDependencies）；
+    // 在则走 webhook 规则，不在则 /make 直连创建会话，两条路等价。
+    const webhookRuntime = ctx.get('webhookRuntime') ?? null
 
     // 规则：把制作请求变成一个新会话；workspace 用用户设置的输出目录
-    disposeRule = webhookRuntime.register({
-      id: 'plugin-scaffold/make',
-      kind: 'scaffold',
-      run: (delivery) => {
-        const event = delivery.event ?? {}
-        const requirement = String(event.requirement ?? '').trim()
-        if (!requirement) return null
-        return {
-          workspacePath: getOutputDir(config.outputDir),
-          title: `制作插件：${requirement.slice(0, 30)}`,
-          prompt: composePrompt(requirement.slice(0, 2000), String(event.templateHint ?? ''), String(event.referenceText ?? '').slice(0, 60000)),
-          agentPreset: 'standard',
-          permissionPreset: 'workspace-write',
-        }
-      },
-    })
+    if (webhookRuntime) {
+      disposeRule = webhookRuntime.register({
+        id: 'plugin-scaffold/make',
+        kind: 'scaffold',
+        run: (delivery) => {
+          const event = delivery.event ?? {}
+          const requirement = String(event.requirement ?? '').trim()
+          if (!requirement) return null
+          return {
+            workspacePath: getOutputDir(config.outputDir),
+            title: `制作插件：${requirement.slice(0, 30)}`,
+            prompt: composePrompt(requirement.slice(0, 2000), String(event.templateHint ?? ''), String(event.referenceText ?? '').slice(0, 60000)),
+            agentPreset: 'standard',
+            permissionPreset: 'workspace-write',
+          }
+        },
+      })
+    }
 
     disposeRoute = webServer.register({
       kind: 'prefix',
@@ -264,19 +338,29 @@ export function registerScaffoldPage(ctx, config) {
             const body = await readJsonBody(req, MAX_MAKE_BODY_BYTES)
             const requirement = String(body?.requirement ?? '').trim()
             if (!requirement) return respond(400, { error: 'requirement 必填' })
-            webhookRuntime.dispatch({
-              kind: 'scaffold',
-              source: 'plugin-scaffold',
-              deliveryId: `make-${Date.now()}-${randomBytes(4).toString('hex')}`,
-              event: {
-                requirement: requirement.slice(0, 2000),
-                templateHint: String(body?.templateHint ?? ''),
-                referenceText: String(body?.referenceText ?? '').slice(0, 60000),
-              },
-              receivedAt: Date.now(),
+            const event = {
+              requirement: requirement.slice(0, 2000),
+              templateHint: String(body?.templateHint ?? ''),
+              referenceText: String(body?.referenceText ?? '').slice(0, 60000),
+            }
+            if (webhookRuntime) {
+              webhookRuntime.dispatch({
+                kind: 'scaffold',
+                source: 'plugin-scaffold',
+                deliveryId: `make-${Date.now()}-${randomBytes(4).toString('hex')}`,
+                event,
+                receivedAt: Date.now(),
+              })
+              // fire-and-forget：会话创建由 webhookRuntime 异步完成
+              return respond(202, { ok: true })
+            }
+            // 无 webhookRuntime（dsh ≥ 0.2.1 的 web 模式）：直连创建会话
+            const sessionId = await createScaffoldSession(ctx, {
+              workspacePath: getOutputDir(config.outputDir),
+              title: `制作插件：${event.requirement.slice(0, 30)}`,
+              prompt: composePrompt(event.requirement, event.templateHint, event.referenceText),
             })
-            // fire-and-forget：会话创建由 webhookRuntime 异步完成
-            return respond(202, { ok: true })
+            return respond(200, { ok: true, sessionId })
           }
           return respond(404, { error: `unknown: ${req.method} ${path}` })
         } catch (e) {
@@ -295,7 +379,7 @@ export function registerScaffoldPage(ctx, config) {
       table.push({ kind: 'global', name: '__PLUGIN_SCAFFOLD_TOKEN__', value: token })
     })
 
-    ctx.logger.info(`plugin-scaffold：制作插件页面已挂载（${ROUTE_PREFIX}/*）`)
+    ctx.logger.info(`plugin-scaffold：制作插件页面已挂载（${ROUTE_PREFIX}/*，制作请求走${webhookRuntime ? ' webhook 规则' : '直连建会话'}）`)
   }
 
   tryMount()

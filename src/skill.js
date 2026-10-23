@@ -27,7 +27,7 @@ const SKILL_BODY = `\
 
 5. **校验修复循环**：调 \`scaffold_validate\`（默认做激活预检：装依赖 → import → apply，会把 defineTool 的 schema 编译错误提前暴露）。有错就改（scaffold_write_file 置 overwrite=true 覆盖），再校验，直到通过。
 
-6. **交付**：调 \`scaffold_package\` 打 zip。向用户输出：插件是什么、有哪些工具、安装命令、使用示例。若用户明确要求"装进当前 profile"，直接调 \`scaffold_install\`（会先装依赖再装包激活）；要求装进其它 profile，给 \`dsh plugin --profile <名> add <目录>\` 命令。
+6. **交付**：调 \`scaffold_package\` 打 zip。向用户输出：插件是什么、有哪些工具、使用示例。并明确告知用户：**插件已经出现在「制作插件」设置页下方的插件列表里，直接点该插件的「安装」按钮即可一键装进当前 profile（装完 live 生效），不需要任何命令行操作**。**默认不要输出 \`dsh plugin add\` 命令行安装方式**——安装入口就是页面上的按钮。仅当用户明确要求命令行安装、或要装进其它 profile 时，才给 \`dsh plugin --profile <名> add <目录>\` 命令；用户明确说"直接帮我装/装进当前 profile"时，也可直接调 \`scaffold_install\` 由你完成安装。
 
 ## 计划草案（plan 参数）格式
 
@@ -77,6 +77,7 @@ const SKILL_BODY = `\
 8. 文件写入类工具：产物路径要回报给用户，并处理文件不存在/超限的报错。
 9. capability 模板注册 skill 时必须带 \`source: 'runtime'\`（dsh 的 validateDefinition 要求），技能正文从 assets/skill.md 读入并与 assets/examples.json 的示例拼接。
 10. toolkit 模板：cordis.patch.yml 里的 mcp-client \`serverName\` 必须唯一且匹配 \`^[A-Za-z0-9_-]{1,32}$\`；stdio 必填 command、streamable-http 必填 url；MCP 密钥一律经 env/headers 注入（值留占位，文档告知用户 export 什么），**绝不把 token 写死进生成代码或 zip**。
+11. **不要抓 dsh Web 界面来验证插件页面/组件**：Web 界面 URL 带进程 token，外部抓取（web 工具 / curl / fetch）只会拿到 401 或极小的响应，得不到任何有效内容。浏览器侧组件（悬浮小组件、设置页 section 等）的正确性靠代码审查保证：对照 client.js 的 \`window.__ModuleLoader__.load\` 约定（react 等共享模块由宿主模块表提供，\`require('react')\` 即可）逐一核对；交付时让用户刷新页面查看实际效果。
 
 ## 语气
 

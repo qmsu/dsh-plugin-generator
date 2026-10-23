@@ -33,3 +33,13 @@ export function isValidKebab(id) {
 export function pretty(value) {
   return JSON.stringify(value, null, 2)
 }
+
+/**
+ * 归一化 json 类型工具参数：模型有时把对象序列化成 JSON 字符串传入，
+ * 宽容解析；解析不了或类型不符时返回 fallback（默认 undefined）。
+ */
+export function coerceJson(value, fallback = undefined) {
+  if (value === undefined || value === null || value === '') return fallback
+  const parsed = typeof value === 'string' ? (() => { try { return JSON.parse(value) } catch { return fallback } })() : value
+  return parsed === undefined ? fallback : parsed
+}

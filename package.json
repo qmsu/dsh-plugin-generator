@@ -34,7 +34,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-tools": "*",
-    "@deepseek-ai/dsh-webhook": "*",
+    "@deepseek-ai/dsh-llm": "*",
     "@deepseek-ai/schemastery": "*"
   },
   "keywords": [

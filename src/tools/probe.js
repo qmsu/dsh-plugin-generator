@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import net from 'node:net'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { textBlock } from './util.js'
+import { textBlock, coerceJson } from './util.js'
 
 // 懒加载 runner：本体可解析即视为可启动，工具包在 MCP 首次连接时才下载
 const LAZY_RUNNERS = new Set(['npx', 'uvx', 'pipx', 'bunx', 'pnpm', 'pnpx', 'yarn'])
@@ -82,7 +82,8 @@ export function registerProbeTool(ctx) {
       ),
     },
     execute: async (args) => {
-      const servers = Array.isArray(args.servers) ? args.servers : []
+      const list = coerceJson(args.servers, [])
+      const servers = Array.isArray(list) ? list : []
       const results = []
       for (const s of servers) results.push(await probeMcpServer(s))
       return { results }
