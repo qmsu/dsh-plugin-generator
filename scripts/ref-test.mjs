@@ -1,9 +1,10 @@
 // 验证 scaffold_read_reference 的 Excel/docx 抽取。
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { registerScaffoldTools } from '../src/tools/index.js'
 
 const dir = '/Users/zg/Documents/fnsync/息壤/xirang-code/dsh-plugin-generator/.e2e-ref'
+mkdirSync(dir, { recursive: true })
 const registered = new Map()
 registerScaffoldTools({
   logger: { info: () => {} },

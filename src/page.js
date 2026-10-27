@@ -178,16 +178,14 @@ async function createScaffoldSession(ctx, { workspacePath, title, prompt }) {
 }
 
 export function registerScaffoldPage(ctx, config) {
-  // CSRF token：随机生成，经 index 注入给同源的浏览器页面，跨站攻击者读不到
-  const token = randomBytes(24).toString('base64url')
   let disposeRoute
-  let disposeTap
   let disposeRule
 
   const tryMount = () => {
     if (disposeRoute) return // 已挂载（不处理服务反复起伏的极端情况）
     const webServer = ctx.get('webServer')
-    if (!webServer) return
+    const connection = ctx.get('connection')
+    if (!webServer || !connection) return
     // webhookRuntime 在 dsh 0.2.1 起的 web 模式不再携带（dsh-webhook 移入 devDependencies）；
     // 在则走 webhook 规则，不在则 /make 直连创建会话，两条路等价。
     const webhookRuntime = ctx.get('webhookRuntime') ?? null
@@ -221,7 +219,10 @@ export function registerScaffoldPage(ctx, config) {
           res.end(JSON.stringify(body))
         }
         try {
-          if (req.headers['x-plugin-scaffold-token'] !== token) return respond(403, { error: 'forbidden' })
+          // 与 dsh 官方宿主路由一致：浏览器请求复用 Connection 的 Host/Origin 校验和登录 cookie。
+          // 不能用 index 注入的插件私有 token：live 安装/重载后旧页面不会重新渲染 index。
+          const rejection = connection.requestRejection(req)
+          if (rejection !== undefined) return respond(rejection, { error: rejection === 403 ? 'forbidden' : 'unauthorized' })
           const url = new URL(req.url, 'http://dsh.invalid')
           const path = url.pathname
 
@@ -319,7 +320,7 @@ export function registerScaffoldPage(ctx, config) {
             const zipPath = exportPlugin(target, getOutputDir(config.outputDir))
             return respond(200, { ok: true, zipPath })
           }
-          // 下载刚导出的 zip（token 走 header，浏览器端 fetch→blob→保存）
+          // 下载刚导出的 zip（同源浏览器请求自动带登录 cookie，浏览器端 fetch→blob→保存）
           if (path === `${ROUTE_PREFIX}/download` && req.method === 'GET') {
             const file = decodeURIComponent(url.searchParams.get('file') ?? '')
             // 只允许下载 _exports/ 下的 zip，防路径逃逸
@@ -374,11 +375,6 @@ export function registerScaffoldPage(ctx, config) {
       },
     })
 
-    // 把 token 作为 global 行注入 index（结构化注入表，等价于 boot 图注入，不依赖 tapIndex 时机）
-    disposeTap = ctx.on('webserver/index-inject', (table) => {
-      table.push({ kind: 'global', name: '__PLUGIN_SCAFFOLD_TOKEN__', value: token })
-    })
-
     ctx.logger.info(`plugin-scaffold：制作插件页面已挂载（${ROUTE_PREFIX}/*，制作请求走${webhookRuntime ? ' webhook 规则' : '直连建会话'}）`)
   }
 
@@ -389,6 +385,5 @@ export function registerScaffoldPage(ctx, config) {
   ctx.effect(() => () => {
     disposeRule?.()
     disposeRoute?.()
-    disposeTap?.()
   }, 'plugin-scaffold: page teardown')
 }

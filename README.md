@@ -131,6 +131,10 @@ cd ~/.dsh/profiles/web && CI=true pnpm install
 1. 系统设置 → 隐私与安全性 → 文件与文件夹（或「完全磁盘访问权限」）→ 勾选运行 dsh 的终端应用的「下载文件夹」，然后**重启终端再启动 dsh**；
 2. 改用主目录下的文件夹存放插件（如 `~/dsh-scaffold-data`），不受 TCC 限制。
 
+**live 安装后选择目录报「保存失败：forbidden」**
+
+旧版本把插件私有 token 注入初次加载的 index；dsh 0.2.1 支持 live 安装/热重载，已打开页面不会重新渲染 index，因此新装插件的页面请求会缺 token。当前版本已改为复用 dsh 自带的浏览器登录 cookie 认证，live 安装后无需刷新页面。更新本插件并重启/重载 dsh 即可。
+
 **升级 dsh 后「制作插件」页面空白 / 保存目录报 405**
 
 多半是 dsh 大版本变更导致插件接口变化（如 0.2.1 不再分发 `dsh-webhook`）。本仓库已兼容 0.2.1：更新本插件后重启 `npx -y @deepseek-ai/dsh@latest web`；若仍异常，看 dsh 启动日志里 `plugin-scaffold` 开头的行定位。

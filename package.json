@@ -11,7 +11,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "check": "node --check src/index.js && for f in src/tools/*.js src/templates/*.js; do node --check $f; done && echo OK"
+    "check": "node --check src/index.js && node --check src/page.js && node --check client.js && for f in src/tools/*.js src/templates/*.js; do node --check $f; done && node scripts/page-auth-test.mjs && echo OK",
+    "test:page-auth": "node scripts/page-auth-test.mjs"
   },
   "dsh": {
     "bundle": {

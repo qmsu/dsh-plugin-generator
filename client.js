@@ -512,9 +512,7 @@ window.__ModuleLoader__.load({
           request('POST', '/plugin-scaffold/export', { path: plugin.path }).then(function (res) {
             if (res.ok && res.body.ok) {
               var zipPath = res.body.zipPath
-              return fetch('/plugin-scaffold/download?file=' + encodeURIComponent(zipPath), {
-                headers: { 'x-plugin-scaffold-token': window.__PLUGIN_SCAFFOLD_TOKEN__ || '' },
-              }).then(function (r) {
+              return fetch('/plugin-scaffold/download?file=' + encodeURIComponent(zipPath)).then(function (r) {
                 if (!r.ok) throw new Error('download ' + r.status)
                 return r.blob()
               }).then(function (blob) {
@@ -772,14 +770,13 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** 带 CSRF token 的同源 JSON 请求。 */
+    /** 同源 JSON 请求；dsh 的浏览器登录 cookie 会随请求自动携带。 */
     function createRequest() {
       return function request(method, path, body) {
         return fetch(path, {
           method: method,
           headers: {
             'content-type': 'application/json',
-            'x-plugin-scaffold-token': window.__PLUGIN_SCAFFOLD_TOKEN__ || '',
           },
           body: body === undefined ? undefined : JSON.stringify(body),
         }).then(function (res) {
