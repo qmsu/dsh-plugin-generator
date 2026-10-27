@@ -27,7 +27,9 @@ const SKILL_BODY = `\
 
 5. **校验修复循环**：调 \`scaffold_validate\`（默认做激活预检：装依赖 → import → apply，会把 defineTool 的 schema 编译错误提前暴露）。有错就改（scaffold_write_file 置 overwrite=true 覆盖），再校验，直到通过。
 
-6. **交付**：调 \`scaffold_package\` 打 zip。向用户输出：插件是什么、有哪些工具、使用示例。并明确告知用户：**插件已经出现在「制作插件」设置页下方的插件列表里，直接点该插件的「安装」按钮即可一键装进当前 profile（装完 live 生效），不需要任何命令行操作**。**默认不要输出 \`dsh plugin add\` 命令行安装方式**——安装入口就是页面上的按钮。仅当用户明确要求命令行安装、或要装进其它 profile 时，才给 \`dsh plugin --profile <名> add <目录>\` 命令；用户明确说"直接帮我装/装进当前 profile"时，也可直接调 \`scaffold_install\` 由你完成安装。
+6. **真实安装验收**：调 \`scaffold_install\` 把插件装进当前 profile 并确认激活。验收标准是返回 \`ok=true\`——\`application=applied\`、目标条目 \`fiberPhase=active\`、且无目标插件相关的 pending/did not activate 警告。**失败不算完成**：按返回的 \`diagnostic\` 修复代码或依赖（scaffold_write_file 置 overwrite=true），重跑 \`scaffold_validate\` 通过后重跑 \`scaffold_install\`，直到 \`ok=true\`。\`restartRequired=true\` 也不算验收通过，需告知用户该 profile 要重启才能生效。\`active=false\` 时插件只是被装上了但没有真正跑起来，绝不能当作成功交付。
+
+7. **交付**：安装验收通过后调 \`scaffold_package\` 打 zip。向用户输出：插件是什么、有哪些工具、使用示例。并明确告知用户：**插件已经装进当前 profile 并激活，刷新页面即可使用，不需要再点安装按钮**；zip 包用于备份、分享或装到其它 profile。要装进其它 profile 时，给 \`dsh plugin --profile <名> add <目录>\` 命令，或让用户到该 profile 的「制作插件」设置页点安装。
 
 ## 计划草案（plan 参数）格式
 

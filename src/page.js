@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { activationDryRun, ensurePluginDeps, readPluginPackage } from './activation.js'
+import { installPluginWithAcceptance, profilePackageManager } from './install-acceptance.js'
 import { getOutputDir, listPlugins, setOutputDir } from './settings.js'
 
 const ROUTE_PREFIX = '/plugin-scaffold'
@@ -97,14 +98,6 @@ function listProfiles(ctx) {
     current = ctx.get('profileContext')?.name ?? null
   } catch {}
   return { current, all: all.sort() }
-}
-
-function profilePackageManager(ctx) {
-  try {
-    return ctx.get('profileContext')?.packageManager ?? null
-  } catch {
-    return null
-  }
 }
 
 // 把插件目录打包成 zip（排除 node_modules），写到 <outputRoot>/_exports/
@@ -281,9 +274,8 @@ export function registerScaffoldPage(ctx, config) {
             const body = await readJsonBody(req, MAX_BODY_BYTES)
             const target = String(body?.path ?? '').trim()
             if (!target) return respond(400, { error: 'path 必填' })
-            ensurePluginDeps(target, profilePackageManager(ctx))
-            const result = await pm.installBundle(target)
-            return respond(200, changeBody(result))
+            const result = await installPluginWithAcceptance(ctx, target)
+            return respond(200, result)
           }
           // 更新：改代码后重装依赖并重新激活（toggle bundle 让 runtime 重新 import 链接源）
           if (path === `${ROUTE_PREFIX}/update` && req.method === 'POST') {

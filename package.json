@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-generator",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "dsh 插件制作脚手架：在 dsh 会话里一句话制作插件（支持参考文件，生成的插件可处理文件）",
   "type": "module",
   "main": "src/index.js",
@@ -11,9 +11,10 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "check": "node --check src/index.js && node --check src/page.js && node --check client.js && for f in src/tools/*.js src/templates/*.js; do node --check $f; done && node scripts/activation-test.mjs && node scripts/page-auth-test.mjs && echo OK",
+    "check": "node --check src/index.js && node --check src/page.js && node --check client.js && node --check src/activation.js && node --check src/install-acceptance.js && node --check src/skill.js && for f in src/tools/*.js src/templates/*.js; do node --check $f; done && node scripts/activation-test.mjs && node scripts/page-auth-test.mjs && node scripts/install-acceptance-test.mjs && echo OK",
     "test:page-auth": "node scripts/page-auth-test.mjs",
-    "test:activation": "node scripts/activation-test.mjs"
+    "test:activation": "node scripts/activation-test.mjs",
+    "test:install-acceptance": "node scripts/install-acceptance-test.mjs"
   },
   "dsh": {
     "bundle": {

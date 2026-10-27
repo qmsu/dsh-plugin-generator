@@ -1,23 +1,14 @@
-// scaffold_install：把生成的插件装进当前 profile（pluginManager.installBundle，live 生效）。
-// 与页面「安装」共用 ensurePluginDeps——本地目录 link 进 profile 时依赖需要自己装。
+// scaffold_install：生成流程的安装验收。真实走 plugin_manager，并要求目标条目在当前运行时 active。
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { ensurePluginDeps, readPluginPackage } from '../activation.js'
+import { installPluginWithAcceptance } from '../install-acceptance.js'
 import { textBlock } from './util.js'
-
-function profilePackageManager(ctx) {
-  try {
-    return ctx.get('profileContext')?.packageManager ?? null
-  } catch {
-    return null
-  }
-}
 
 export function registerInstallTool(ctx) {
   ctx.tools.register(defineTool({
     name: 'scaffold_install',
-    description: '把已生成的插件装进当前 profile 并激活（用户明确要求安装时再调用）。会先在插件目录内安装它的 dependencies（pnpm/npm），再走 dsh 的 plugin_manager 完成装包与激活。',
+    description: '安装验收：把已生成插件真实装进当前 profile，并确认目标条目已 active。生成流程在校验通过后必须调用；失败则按 diagnostic 修复后重新 validate/install。',
     parameters: {
       pluginDir: {
         type: 'string',
@@ -34,13 +25,16 @@ export function registerInstallTool(ctx) {
           application: { type: 'string', required: true },
           pluginName: { type: 'string', required: true },
           diagnostic: { type: 'string' },
+          warnings: { type: 'json' },
+          active: { type: 'boolean', required: true },
+          fiberPhase: { type: 'string' },
           restartRequired: { type: 'boolean', required: true },
         },
       },
       render: (args, value) => textBlock(
         value.ok
           ? `已安装并激活插件「${value.pluginName}」${value.restartRequired ? '（需重启 profile 生效）' : '（live 生效）'}`
-          : `安装失败：${value.diagnostic ?? '未知错误'}`,
+          : `安装验收失败：${value.diagnostic ?? '未知错误'}`,
       ),
     },
     execute: async (args) => {
@@ -48,22 +42,7 @@ export function registerInstallTool(ctx) {
       if (!pluginDir || !existsSync(join(pluginDir, 'package.json'))) {
         throw new Error(`插件目录无效: ${pluginDir}`)
       }
-      const pkg = readPluginPackage(pluginDir)
-      if (!pkg?.name) throw new Error('package.json 缺 name')
-
-      const pm = ctx.get('pluginManager')
-      if (!pm) throw new Error('当前环境没有 plugin_manager 服务，无法自动安装（请用 dsh plugin add 手动安装）')
-
-      ensurePluginDeps(pluginDir, profilePackageManager(ctx))
-      const result = await pm.installBundle(pluginDir)
-      const ok = result.application !== 'failed' && result.application !== 'cancelled'
-      return {
-        ok,
-        application: result.application,
-        pluginName: pkg.name,
-        diagnostic: result.error?.diagnostic ?? result.error?.code,
-        restartRequired: result.application === 'restart-required',
-      }
+      return await installPluginWithAcceptance(ctx, pluginDir)
     },
   }))
 }

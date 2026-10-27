@@ -474,8 +474,10 @@ window.__ModuleLoader__.load({
             else if (action === 'update') req = request('POST', '/plugin-scaffold/update', { path: plugin.path })
             else req = request('POST', '/plugin-scaffold/set-enabled', { entryId: plugin.status && plugin.status.entryId, enabled: action === 'enable' })
             req.then(function (res) {
-              if (res.ok && res.body.ok) {
-                updateList({ opMessage: res.body.application === 'restart-required' ? t('opNeedRestart') : t('opDone'), opError: false })
+              if (res.body && res.body.application === 'restart-required') {
+                updateList({ opMessage: t('opNeedRestart'), opError: false })
+              } else if (res.ok && res.body.ok) {
+                updateList({ opMessage: t('opDone'), opError: false })
               } else {
                 updateList({ opMessage: t('opFailed') + (res.body.diagnostic || res.body.error || res.status), opError: true })
               }
@@ -728,7 +730,7 @@ window.__ModuleLoader__.load({
             '① assets/examples.json 每份成果物各收录一条「输入 → 该成果完整原文」对照对，output 是该成果物在 transcript 里的完整原文，禁止摘要/改写/缩水；' +
             '② assets/skill.md 每份成果物各设一节「原始标杆产出」把原文全文收进去作质量标杆，步骤按先后阶段写清（如 阶段1 产出文章 → 阶段2 以文章为输入产出配图提示词），并写清各阶段可机器检查的产出契约（checkContract 的规则要从各成果原文提炼：必备章节/字段、长度下限、关键内容特征）；' +
             '③ 渲染必须复现源会话**全部**成果、同文件集同格式（如 文章.md 与 配图提示词.md），每阶段渲染成它那份文件，不得合并或退化成 Markdown 摘要。交付前逐阶段用 examples 里的输入重放 validate→render 自验收，确认各成果都与源会话同构。' +
-            '④ **输入会变化的环节（如选了主题 N 就写 N 的主题文章）必须以本次输入为准生成新内容**，示例与标杆只定结构/风格/格式/质量下限，禁止照搬示例原文；checkContract 要用 overlapRatio(collectText(candidate), 示例输出) 防照抄，相似度过高（如 >0.5）判不通过，逼模型针对本次所选重写。最后校验打包。'
+            '④ **输入会变化的环节（如选了主题 N 就写 N 的主题文章）必须以本次输入为准生成新内容**，示例与标杆只定结构/风格/格式/质量下限，禁止照搬示例原文；checkContract 要用 overlapRatio(collectText(candidate), 示例输出) 防照抄，相似度过高（如 >0.5）判不通过，逼模型针对本次所选重写。最后先 scaffold_validate 校验，再 scaffold_install 做真实安装验收（ok=true 才算装上），验收通过后再 scaffold_package 打包交付。'
           request('POST', '/plugin-scaffold/make', { requirement: requirement, templateHint: 'capability', referenceText: '' }).then(function (res) {
             if (!(res.ok && res.body.ok)) { setState('idle'); return }
             if (!host.sessions) { setState('done'); return }
