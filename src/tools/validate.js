@@ -115,6 +115,9 @@ export function registerValidateTool(ctx) {
         }
         const src = readFileSync(file, 'utf8')
         const rel = file.slice(pluginDir.length + 1)
+        if (/export\s+const\s+inject\s*=\s*\[[^\]]*['"]logger['"]/s.test(src)) {
+          errors.push(`${rel}: inject 不能包含 'logger'；logger 是 Cordis 内置属性，声明后会一直 waiting for service: logger`)
+        }
         if (/type\s*:\s*\[/.test(src)) {
           errors.push(`${rel}: schema 的 type 不能是联合数组（如 type: ['string','array']）——dsh DSL 只接受单类型，联合语义改单类型 + 执行内归一化`)
         }

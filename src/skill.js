@@ -68,7 +68,7 @@ const SKILL_BODY = `\
 ## 生成插件的硬性规则（写进代码的约定，违反会导致插件跑不起来）
 
 1. 插件入口**纯 ESM 免构建**：\`export const name / inject / apply\`，不写 TS、不要构建步骤。
-2. \`inject = ['tools']\`（events 模板按需追加服务名；capability 模板是 \`['tools', 'skills']\`）。
+2. \`inject = ['tools']\`（events 模板按需追加服务名；capability 模板是 \`['tools', 'skills']\`）。\`logger\` 是 Cordis 内置属性，直接使用 \`ctx.logger\`，**绝不写进 inject**；写 \`inject: ['logger']\` 会让插件一直 pending（waiting for service: logger）。
 3. 每个 defineTool 的 \`output.schema\` 中，**object 必须写 \`additionalProperties\`（true 或 false）**，否则注册失败。嵌套 object 同样必须显式写；**array 上不要写 \`additionalProperties\`**（不支持）。
 4. schema 的 \`type\` 只能是单个字符串：\`string\` / \`number\` / \`integer\` / \`boolean\` / \`null\` / \`array\` / \`object\` / \`json\`。**禁止 JSON Schema 联合写法 \`type: ['string', 'array']\`**（会报 unsupported JSON schema）。参数想兼容"单个或数组"时，统一声明为 \`array\`（单个值让模型包成单元素数组），执行函数里自己归一化。
 5. 参数名 snake_case，描述写清"做什么 + 何时用"，模型依赖描述路由工具。

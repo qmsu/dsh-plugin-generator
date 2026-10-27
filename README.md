@@ -124,6 +124,10 @@ cd ~/.dsh/profiles/web && CI=true pnpm install
 
 重建后旧 lockfile 会被忽略并按 `package.json` 重新解析（registry 依赖可能顺带升级小版本）。以后大幅升降 pnpm 主版本后若复发，重跑这条命令。
 
+**安装后提示 `pending (waiting for service: logger)`**
+
+`logger` 是 Cordis 内置属性，不是可注入服务。打开生成插件的 `src/index.js`，把 `export const inject = ['logger']` 里的 `logger` 删除（例如改回 `export const inject = []`；如果同时声明了 `tools` / `skills`，保留它们）。代码里仍可直接使用 `ctx.logger`。v0.2.7 起预检和 `scaffold_validate` 会提前拦住这个写法。
+
 **选择「下载/桌面/文稿」等目录保存时提示权限错误（EPERM / operation not permitted）**
 
 这不是插件的问题，是 macOS 的隐私门控（TCC）：dsh 进程继承自启动它的终端应用，若该应用没有对应文件夹的访问权限，任何目录操作都会被系统拦截。解决办法二选一：

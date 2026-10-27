@@ -164,11 +164,14 @@ export async function activationDryRun(pluginDir, packageManager = null) {
 
   try {
     const mod = await import(`${pathToFileURL(abs).href}?preflight=${Date.now()}`)
+    const declared = new Set(Array.isArray(mod.inject) ? mod.inject.map(String) : [])
+    if (declared.has('logger')) {
+      throw new Error('logger 是 Cordis 内置属性，不是可 inject 服务：请从入口的 inject 数组删除 "logger"')
+    }
     const applyFn = mod?.apply ?? mod?.default
     if (typeof applyFn === 'function') {
       // 模拟 cordis fiber 的真实规则：模块声明了哪些 inject 就允许用哪些服务属性，
       // 访问未声明的服务直接抛错（跟 runtime 的 "cannot get property X without inject" 一致）。
-      const declared = new Set(Array.isArray(mod.inject) ? mod.inject.map(String) : [])
       const guarded = new Proxy(mock, {
         get(target, prop) {
           const key = String(prop)

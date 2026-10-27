@@ -3,7 +3,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { ensurePluginDeps } from '../src/activation.js'
+import { activationDryRun, ensurePluginDeps } from '../src/activation.js'
 
 const root = mkdtempSync(join(tmpdir(), 'dsh-plugin-scaffold-deps-'))
 const fixtureDir = join(root, 'fixture')
@@ -94,6 +94,21 @@ try {
   })
   if (!existsSync(join(explicitPlugin, 'node_modules', 'fixture-dep', 'desktop-pnpm-used'))) {
     throw new Error('profileContext.packageManager 未被用于依赖安装')
+  }
+
+  // Cordis 的 logger 是内置属性，不是可注入服务；声明 inject: ['logger'] 会在 dsh 里一直 pending。
+  const badInjectPlugin = join(root, 'bad-inject-plugin')
+  mkdirSync(badInjectPlugin, { recursive: true })
+  writeFileSync(join(badInjectPlugin, 'package.json'), `${JSON.stringify({
+    name: 'bad-inject-plugin',
+    version: '1.0.0',
+    type: 'module',
+    main: 'index.js',
+  }, null, 2)}\n`)
+  writeFileSync(join(badInjectPlugin, 'index.js'), `export const name = 'bad-inject-plugin'\nexport const inject = ['logger']\nexport function apply(ctx) { ctx.logger.info('x') }\n`)
+  const badInject = await activationDryRun(badInjectPlugin)
+  if (badInject.ok || !/logger/.test(badInject.error ?? '') || !/inject/.test(badInject.error ?? '')) {
+    throw new Error(`inject logger 未被发现: ${JSON.stringify(badInject)}`)
   }
 
   console.log('ACTIVATION DEPS TEST OK')

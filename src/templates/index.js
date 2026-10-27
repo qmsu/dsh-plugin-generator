@@ -138,6 +138,7 @@ function renderEvents(plan) {
     'README.md': `# ${plan.packageName}\n\n${plan.description}\n\n监听事件：${events.join(', ')}\n`,
     'src/index.js': `// ${plan.packageName}：${plan.description}
 // 由 dsh-plugin-generator 生成（events 模板）。
+	// logger 是 Cordis 内置属性，直接用 ctx.logger，不能写进 inject。
 export const name = '${plan.pluginId}'
 export const inject = []
 
