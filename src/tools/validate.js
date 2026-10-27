@@ -9,6 +9,14 @@ import { pretty, textBlock } from './util.js'
 
 const execFileP = promisify(execFile)
 
+function profilePackageManager(ctx) {
+  try {
+    return ctx.get?.('profileContext')?.packageManager ?? null
+  } catch {
+    return null
+  }
+}
+
 /** 递归收集插件目录内的 .js 文件（跳过 node_modules）。 */
 function collectJsFiles(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -118,7 +126,7 @@ export function registerValidateTool(ctx) {
       // 激活预检：装依赖 → import → apply（defineTool 编译 schema 的真实失败点）
       let activation = null
       if (args.deep !== false && !errors.some((e) => e.startsWith('入口') || e.startsWith('缺少'))) {
-        activation = await activationDryRun(pluginDir)
+        activation = await activationDryRun(pluginDir, profilePackageManager(ctx))
         if (!activation.ok) errors.push(`激活预检失败: ${activation.error}`)
       }
 

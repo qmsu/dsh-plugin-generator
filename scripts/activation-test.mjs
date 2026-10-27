@@ -1,8 +1,8 @@
 // 依赖安装回归：dsh 由桌面/GUI 启动时，PATH 常不含 pnpm/npm/node。
-// ensurePluginDeps 必须复用当前 JS 运行时自带的 npm CLI，而不是依赖宿主 PATH。
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
+// ensurePluginDeps 必须优先复用 dsh Desktop primary-runtime，再不依赖 PATH 地使用 Node 自带 npm。
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { ensurePluginDeps } from '../src/activation.js'
 
 const root = mkdtempSync(join(tmpdir(), 'dsh-plugin-scaffold-deps-'))
@@ -42,6 +42,60 @@ try {
   if (!existsSync(join(pluginDir, 'node_modules', 'fixture-dep', 'package.json'))) {
     throw new Error('依赖没有安装到插件 node_modules')
   }
+
+  // dsh Desktop（Windows）宿主：不是标准 Node 安装；primary-runtime 提供 node + pnpm.mjs。
+  const desktopRuntime = join(root, 'primary-runtime')
+  const desktopNode = join(desktopRuntime, 'dependencies', 'node', 'bin', process.platform === 'win32' ? 'node.exe' : 'node')
+  const desktopPnpm = join(desktopRuntime, 'dependencies', 'pnpm', 'bin', 'pnpm.mjs')
+  mkdirSync(dirname(desktopNode), { recursive: true })
+  mkdirSync(dirname(desktopPnpm), { recursive: true })
+  symlinkSync(process.execPath, desktopNode)
+  writeFileSync(desktopPnpm, `import { mkdirSync, writeFileSync } from 'node:fs'\nimport { join } from 'node:path'\nmkdirSync(join(process.cwd(), 'node_modules', 'fixture-dep'), { recursive: true })\nwriteFileSync(join(process.cwd(), 'node_modules', 'fixture-dep', 'desktop-pnpm-used'), 'yes\\n')\n`)
+
+  const desktopPlugin = join(root, 'desktop-plugin')
+  mkdirSync(desktopPlugin, { recursive: true })
+  writeFileSync(join(desktopPlugin, 'package.json'), `${JSON.stringify({
+    name: 'desktop-fixture-plugin',
+    version: '1.0.0',
+    type: 'module',
+    main: 'index.js',
+    dependencies: { 'fixture-dep': 'file:../fixture' },
+  }, null, 2)}\n`)
+  writeFileSync(join(desktopPlugin, 'index.js'), 'export const ok = true\n')
+
+  const oldArgv = process.argv.slice()
+  process.argv.length = 2
+  process.argv[4] = desktopRuntime
+  try {
+    ensurePluginDeps(desktopPlugin)
+  } finally {
+    process.argv.length = 0
+    process.argv.push(...oldArgv)
+  }
+  if (!existsSync(join(desktopPlugin, 'node_modules', 'fixture-dep', 'desktop-pnpm-used'))) {
+    throw new Error('dsh Desktop primary-runtime 的 pnpm 未被用于依赖安装')
+  }
+
+  // 桌面 Host 正常还会通过 profileContext.packageManager 明确传入 pnpm 调用；页面/工具优先使用它。
+  const explicitPlugin = join(root, 'explicit-plugin')
+  mkdirSync(explicitPlugin, { recursive: true })
+  writeFileSync(join(explicitPlugin, 'package.json'), `${JSON.stringify({
+    name: 'explicit-fixture-plugin',
+    version: '1.0.0',
+    type: 'module',
+    main: 'index.js',
+    dependencies: { 'fixture-dep': 'file:../fixture' },
+  }, null, 2)}\n`)
+  writeFileSync(join(explicitPlugin, 'index.js'), 'export const ok = true\n')
+  ensurePluginDeps(explicitPlugin, {
+    command: desktopNode,
+    args: [desktopPnpm],
+    env: {},
+  })
+  if (!existsSync(join(explicitPlugin, 'node_modules', 'fixture-dep', 'desktop-pnpm-used'))) {
+    throw new Error('profileContext.packageManager 未被用于依赖安装')
+  }
+
   console.log('ACTIVATION DEPS TEST OK')
 } finally {
   process.env.PATH = oldPath

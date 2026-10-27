@@ -4,7 +4,7 @@
 //   - defineTool 在调用时即编译 schema，schema 非法会抛 JsonSchemaError → 用 import + apply 就能在安装前发现。
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 /** 读取插件 package.json；失败返回 null。 */
@@ -21,7 +21,12 @@ function resolveBundledNpmCli() {
   const candidates = []
   if (process.env.npm_execpath) candidates.push(process.env.npm_execpath)
 
-  const nodeBinaries = [process.execPath, process.env.npm_node_execpath, process.env.NODE]
+  const nodeBinaries = [
+    process.execPath,
+    process.env.npm_node_execpath,
+    process.env.NODE,
+    process.env.DSH_DESKTOP_NODE_EXECUTABLE,
+  ]
   for (const nodeBin of nodeBinaries) {
     if (!nodeBin) continue
     const binDir = dirname(nodeBin)
@@ -32,6 +37,52 @@ function resolveBundledNpmCli() {
   }
 
   return [...new Set(candidates)].find((file) => existsSync(file)) ?? null
+}
+
+/** dsh 给 profileContext.packageManager 的调用方式：命令 + 前缀参数 + 专用环境。 */
+function profilePackageManagerAttempt(packageManager) {
+  if (!packageManager || typeof packageManager.command !== 'string' || packageManager.command === '') return null
+  return {
+    label: `pnpm(${packageManager.command})`,
+    cmd: packageManager.command,
+    args: [...(packageManager.args ?? []), 'install'],
+    env: { ...process.env, ...(packageManager.env ?? {}) },
+  }
+}
+
+/**
+ * dsh Desktop 宿主把 primary-runtime / pnpm 入口作为宿主进程参数传给 Host：
+ * argv[4] = primary-runtime，argv[5] = pnpm.mjs，argv[6] = 私有 node launcher 目录。
+ * Windows 桌面版的 process.execPath 是 Electron，周围没有 npm-cli.js；这里直接用运行时自带 node。
+ */
+function desktopRuntimePackageManagerAttempt() {
+  const primaryRuntime = typeof process.argv[4] === 'string' ? process.argv[4] : ''
+  const candidates = [
+    typeof process.argv[5] === 'string' ? process.argv[5] : '',
+    primaryRuntime ? join(primaryRuntime, 'dependencies', 'pnpm', 'bin', 'pnpm.mjs') : '',
+  ].filter(Boolean)
+  const pnpm = candidates.find((file) => /pnpm\.(?:mjs|cjs)$/.test(file) && existsSync(file))
+  if (!pnpm) return null
+
+  const bundledNode = primaryRuntime
+    ? join(primaryRuntime, 'dependencies', 'node', 'bin', process.platform === 'win32' ? 'node.exe' : 'node')
+    : ''
+  if (bundledNode && existsSync(bundledNode)) {
+    return { label: 'pnpm(desktop-runtime)', cmd: bundledNode, args: [pnpm, 'install'] }
+  }
+
+  const nodeBin = typeof process.argv[6] === 'string' ? process.argv[6] : ''
+  return {
+    label: 'pnpm(desktop-runtime)',
+    cmd: process.execPath,
+    args: ['--expose-internals', pnpm, 'install'],
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      DSH_DESKTOP_NODE_EXECUTABLE: process.execPath,
+      ...(nodeBin ? { PATH: `${nodeBin}${delimiter}${process.env.PATH ?? ''}` } : {}),
+    },
+  }
 }
 
 function npmInstallCommand() {
@@ -50,7 +101,7 @@ function npmInstallCommand() {
  * pnpm 优先、npm 兜底；没有 dependencies 或已有 node_modules 则跳过。
  * 失败抛错。
  */
-export function ensurePluginDeps(pluginDir) {
+export function ensurePluginDeps(pluginDir, packageManager = null) {
   const pkg = readPluginPackage(pluginDir)
   if (!pkg) throw new Error('读取 package.json 失败')
   const deps = pkg.dependencies ?? {}
@@ -59,9 +110,11 @@ export function ensurePluginDeps(pluginDir) {
   if (existsSync(join(pluginDir, 'node_modules'))) return
   const errors = []
   const attempts = [
-    { cmd: 'pnpm', args: ['install'] },
+    profilePackageManagerAttempt(packageManager),
+    desktopRuntimePackageManagerAttempt(),
+    { label: 'pnpm', cmd: 'pnpm', args: ['install'] },
     npmInstallCommand(),
-  ]
+  ].filter(Boolean)
   for (const attempt of attempts) {
     const run = spawnSync(attempt.cmd, attempt.args, {
       cwd: pluginDir,
@@ -70,7 +123,7 @@ export function ensurePluginDeps(pluginDir) {
       ...(attempt.env ? { env: attempt.env } : {}),
     })
     if (!run.error && run.status === 0) return
-    const label = attempt.cmd === process.execPath ? `npm(${npmCliLabel(attempt.args[0])})` : attempt.cmd
+    const label = attempt.label ?? (attempt.cmd === process.execPath ? `npm(${npmCliLabel(attempt.args[0])})` : attempt.cmd)
     errors.push(`${label}: ${run.error?.message || String(run.stderr || run.stdout || `exit ${run.status}`).slice(-400)}`)
   }
   throw new Error(`依赖安装失败（${errors.join('；')}）`)
@@ -85,7 +138,7 @@ function npmCliLabel(file) {
  * dsh 官方 runtime 里插件入口只需 export { apply }，apply 用 ctx.tools.register(defineTool(...))。
  * @returns { ok, tools?, error? }
  */
-export async function activationDryRun(pluginDir) {
+export async function activationDryRun(pluginDir, packageManager = null) {
   const pkg = readPluginPackage(pluginDir)
   if (!pkg) return { ok: false, error: '读取 package.json 失败' }
   const main = pkg.main ?? 'src/index.js'
@@ -93,7 +146,7 @@ export async function activationDryRun(pluginDir) {
   if (!existsSync(abs)) return { ok: false, error: `入口不存在: ${main}` }
 
   try {
-    ensurePluginDeps(pluginDir)
+    ensurePluginDeps(pluginDir, packageManager)
   } catch (e) {
     return { ok: false, error: String(e?.message ?? e) }
   }

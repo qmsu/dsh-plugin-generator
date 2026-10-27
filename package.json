@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-generator",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "dsh 插件制作脚手架：在 dsh 会话里一句话制作插件（支持参考文件，生成的插件可处理文件）",
   "type": "module",
   "main": "src/index.js",

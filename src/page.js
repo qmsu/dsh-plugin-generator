@@ -99,6 +99,14 @@ function listProfiles(ctx) {
   return { current, all: all.sort() }
 }
 
+function profilePackageManager(ctx) {
+  try {
+    return ctx.get('profileContext')?.packageManager ?? null
+  } catch {
+    return null
+  }
+}
+
 // 把插件目录打包成 zip（排除 node_modules），写到 <outputRoot>/_exports/
 function exportPlugin(pluginDir, outputRoot) {
   const pkg = JSON.parse(readFileSync(join(pluginDir, 'package.json'), 'utf8'))
@@ -263,7 +271,7 @@ export function registerScaffoldPage(ctx, config) {
             const body = await readJsonBody(req, MAX_BODY_BYTES)
             const target = String(body?.path ?? '').trim()
             if (!target) return respond(400, { error: 'path 必填' })
-            const r = await activationDryRun(target)
+            const r = await activationDryRun(target, profilePackageManager(ctx))
             return respond(200, r)
           }
           // 安装：把输出目录下的插件装进当前 profile（依赖先装 → installBundle 激活）
@@ -273,7 +281,7 @@ export function registerScaffoldPage(ctx, config) {
             const body = await readJsonBody(req, MAX_BODY_BYTES)
             const target = String(body?.path ?? '').trim()
             if (!target) return respond(400, { error: 'path 必填' })
-            ensurePluginDeps(target)
+            ensurePluginDeps(target, profilePackageManager(ctx))
             const result = await pm.installBundle(target)
             return respond(200, changeBody(result))
           }
@@ -286,7 +294,7 @@ export function registerScaffoldPage(ctx, config) {
             if (!target) return respond(400, { error: 'path 必填' })
             const pkgName = readPluginPackage(target)?.name
             if (!pkgName) return respond(400, { error: 'package.json 缺 name' })
-            ensurePluginDeps(target)
+            ensurePluginDeps(target, profilePackageManager(ctx))
             const off = await pm.setBundleEnabled(pkgName, false)
             const on = await pm.setBundleEnabled(pkgName, true)
             return respond(200, changeBody(on))

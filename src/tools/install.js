@@ -6,6 +6,14 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { ensurePluginDeps, readPluginPackage } from '../activation.js'
 import { textBlock } from './util.js'
 
+function profilePackageManager(ctx) {
+  try {
+    return ctx.get('profileContext')?.packageManager ?? null
+  } catch {
+    return null
+  }
+}
+
 export function registerInstallTool(ctx) {
   ctx.tools.register(defineTool({
     name: 'scaffold_install',
@@ -46,7 +54,7 @@ export function registerInstallTool(ctx) {
       const pm = ctx.get('pluginManager')
       if (!pm) throw new Error('当前环境没有 plugin_manager 服务，无法自动安装（请用 dsh plugin add 手动安装）')
 
-      ensurePluginDeps(pluginDir)
+      ensurePluginDeps(pluginDir, profilePackageManager(ctx))
       const result = await pm.installBundle(pluginDir)
       const ok = result.application !== 'failed' && result.application !== 'cancelled'
       return {
