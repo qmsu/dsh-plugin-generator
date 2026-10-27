@@ -4,7 +4,7 @@
 //   - defineTool 在调用时即编译 schema，schema 非法会抛 JsonSchemaError → 用 import + apply 就能在安装前发现。
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 /** 读取插件 package.json；失败返回 null。 */
@@ -13,6 +13,35 @@ export function readPluginPackage(pluginDir) {
     return JSON.parse(readFileSync(join(pluginDir, 'package.json'), 'utf8'))
   } catch {
     return null
+  }
+}
+
+/** 当前 Node 安装自带的 npm CLI；GUI/桌面环境的 PATH 常不含 npm，不能靠裸命令。 */
+function resolveBundledNpmCli() {
+  const candidates = []
+  if (process.env.npm_execpath) candidates.push(process.env.npm_execpath)
+
+  const nodeBinaries = [process.execPath, process.env.npm_node_execpath, process.env.NODE]
+  for (const nodeBin of nodeBinaries) {
+    if (!nodeBin) continue
+    const binDir = dirname(nodeBin)
+    // Windows: <node>/node.exe 旁边是 node_modules/npm/bin/npm-cli.js
+    candidates.push(join(binDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'))
+    // POSIX: <prefix>/bin/node 对应 <prefix>/lib/node_modules/npm/bin/npm-cli.js
+    candidates.push(join(binDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'))
+  }
+
+  return [...new Set(candidates)].find((file) => existsSync(file)) ?? null
+}
+
+function npmInstallCommand() {
+  const npmCli = resolveBundledNpmCli()
+  if (!npmCli) return { cmd: 'npm', args: ['install', '--no-audit', '--no-fund'] }
+  // Electron 宿主也可用：ELECTRON_RUN_AS_NODE 让 process.execPath 作为纯 Node 运行。
+  return {
+    cmd: process.execPath,
+    args: [npmCli, 'install', '--no-audit', '--no-fund'],
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
   }
 }
 
@@ -28,13 +57,27 @@ export function ensurePluginDeps(pluginDir) {
   const peers = pkg.peerDependencies ?? {}
   if (Object.keys(deps).length === 0 && Object.keys(peers).length === 0) return
   if (existsSync(join(pluginDir, 'node_modules'))) return
-  let lastError = ''
-  for (const [cmd, args] of [['pnpm', ['install']], ['npm', ['install', '--no-audit', '--no-fund']]]) {
-    const run = spawnSync(cmd, args, { cwd: pluginDir, encoding: 'utf8', timeout: 300_000 })
+  const errors = []
+  const attempts = [
+    { cmd: 'pnpm', args: ['install'] },
+    npmInstallCommand(),
+  ]
+  for (const attempt of attempts) {
+    const run = spawnSync(attempt.cmd, attempt.args, {
+      cwd: pluginDir,
+      encoding: 'utf8',
+      timeout: 300_000,
+      ...(attempt.env ? { env: attempt.env } : {}),
+    })
     if (!run.error && run.status === 0) return
-    lastError = `${cmd}: ${run.error?.message || String(run.stderr || '').slice(-400)}`
+    const label = attempt.cmd === process.execPath ? `npm(${npmCliLabel(attempt.args[0])})` : attempt.cmd
+    errors.push(`${label}: ${run.error?.message || String(run.stderr || run.stdout || `exit ${run.status}`).slice(-400)}`)
   }
-  throw new Error(`依赖安装失败（${lastError}）`)
+  throw new Error(`依赖安装失败（${errors.join('；')}）`)
+}
+
+function npmCliLabel(file) {
+  return file ? String(file).replace(/^.*[\\/]npm[\\/]bin[\\/]/, 'npm/bin/') : 'npm'
 }
 
 /**
